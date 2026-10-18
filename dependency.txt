@@ -1,73 +1,117 @@
 RAG PLATFORM — DEPENDENCIES THAT pip DOES NOT INSTALL
 ======================================================
-Python packages for the backend are in requirements.txt.
-This file lists everything else: runtimes, services, model servers,
-system packages, local model files and frontend packages.
-Versions are the latest stable releases checked on 18 October 2026.
+Setup: CPU only. Everything runs end to end on ONE local machine — no GPU, no GPU server,
+no Docker. All services listen on 127.0.0.1 (localhost) only.
+Python packages for the backend are in requirements.txt (it installs the CPU-only PyTorch build).
+This file lists everything else. Versions checked on 18 October 2026.
 
 
-1. RUNTIMES
+1. THIS MACHINE
+---------------
+CPU     Intel Core i3-1125G4, 4 cores / 8 threads (AVX2 and AVX-512 supported)
+RAM     7.5 GB
+GPU     not used
+Disk    173 GB free
+OS      Ubuntu 24.04.5 LTS
+
+RAM is the main limit. Approximate memory use with the small models in section 6:
+  PostgreSQL                         ~0.2 GB
+  Redis                              ~0.05 GB
+  MinIO                              ~0.15 GB
+  Qdrant                             ~0.2 GB
+  OpenSearch (heap set to 512 MB)    ~1.0 GB
+  Django API + embedder + reranker   ~0.9 GB
+  Celery worker (Docling, OCR)       ~1.5–2 GB  (only while documents are processed)
+  Ollama with qwen2.5:3b             ~2.5 GB
+  Ubuntu desktop + browser           ~2 GB
+  ------------------------------------------
+  Total while ingesting and chatting ~8.5–9 GB  -> more than 7.5 GB
+How to make it fit:
+  - Process documents and chat at different times (stop the Celery worker while chatting).
+  - Run only one Celery worker with --concurrency=1.
+  - Use qwen2.5:1.5b (~1.2 GB) instead of qwen2.5:3b when memory is short.
+  - Set OLLAMA_MAX_LOADED_MODELS=1 and OLLAMA_NUM_PARALLEL=1.
+  - Close other browser tabs and applications.
+  - Recommended upgrade: 16 GB RAM.
+Expected speed on this CPU (rough estimate): about 20–60 seconds per answer.
+Send only 3–4 short chunks to the LLM to keep it nearer the low end.
+
+
+2. RUNTIMES
 -----------
-Python            3.12          backend (Django + DRF, Celery workers)
-Node.js           24.22.0 LTS   frontend build tooling (npm included)
+Python    3.12           installed (3.12.3)
+Node.js   24 LTS         installed version is 20.19.0 — upgrade with nvm: nvm install 24
+                         (React Router 8 needs Node 22.22+, Vitest 5 needs Node 22.12+ or 24)
 
 
-2. SERVICES (each runs as its own server on the private network)
-----------------------------------------------------------------
-PostgreSQL        18.6          system of record: documents, chunks, jobs, configuration, answers, evaluation
-Redis             8.10.2        Celery broker and result backend, caches
-MinIO             RELEASE.2025-10-15T17-29-55Z
-                                object storage for original files and extracted artifacts
-                                NOTE: the MinIO community repository is archived (last release
-                                October 2025). Decide whether to stay on it or move to another
-                                S3-compatible store; the backend only needs the S3 API.
-Qdrant            1.19.2        vector index (one collection per index generation)
-OpenSearch        3.9.0         BM25 keyword index (one index per generation)
-Flower            (pip)         Celery monitoring UI; installed from requirements.txt
-Langfuse server   4.63.0        tracing and observability (optional)
-                                needs PostgreSQL, Redis or Valkey, ClickHouse 26.7 and S3-compatible storage
-                                NOTE: Langfuse is officially deployed with Docker Compose or Kubernetes,
-                                which conflicts with the "no Docker" rule — decide before setup.
+3. SERVICES (run directly on this machine, no Docker)
+-----------------------------------------------------
+PostgreSQL   16 or newer      installed (16.15) and running — system of record
+Redis        7 or newer       installed (7.0.15) and running — Celery broker and caches
+MinIO        RELEASE.2025-10-15T17-29-55Z
+                              installed (~/go/bin/minio) — object storage for files and artifacts
+                              NOTE: the MinIO community repository is archived (last release
+                              October 2025); the backend only needs the S3 API.
+Qdrant       1.19.2           NOT installed — download qdrant-x86_64-unknown-linux-gnu.tar.gz
+                              from the Qdrant GitHub releases and run the binary
+OpenSearch   3.9.0            NOT installed — download opensearch-3.9.0-linux-x64.tar.gz
+                              (it includes its own Java runtime)
+                              settings for this machine: discovery.type=single-node,
+                              network.host=127.0.0.1, heap -Xms512m -Xmx512m
+Flower       (pip)            Celery monitoring UI, installed from requirements.txt
+Langfuse     NOT USED on this machine — it needs ClickHouse, Redis, S3 and Docker or
+                              Kubernetes, which is too heavy for 7.5 GB RAM. Keep traces in the
+                              PostgreSQL tables (retrieval_runs, answer_records) and in JSON logs.
 
 
-3. MODEL SERVERS (behind the LiteLLM gateway)
----------------------------------------------
-Ollama            0.40.6        simple local LLM serving (development, small teams)
-vLLM              0.32.0        high-throughput GPU serving for production
-                                install in its own virtual environment: pip install vllm==0.32.0
-                                (vLLM 0.32.0 requires torch==2.13.0, the backend uses 2.14.1,
-                                so they cannot share one environment)
+4. MODEL SERVER
+---------------
+Ollama       0.40.6 (latest)  installed version is 0.34.0 (snap) — works; update when convenient
+                              runs models on the CPU; LiteLLM in the backend calls it at
+                              http://127.0.0.1:11434
+vLLM         NOT USED — it is built for GPUs.
 
 
-4. SYSTEM PACKAGES (Ubuntu / Debian names)
-------------------------------------------
-python3.12  python3.12-venv  python3.12-dev  build-essential
-tesseract-ocr                   OCR engine (Ubuntu 24.04 ships 5.3.4; latest upstream is 5.5.3), used by pytesseract
-tesseract-ocr-eng               English language data
-tesseract-ocr-tam               Tamil language data
-tesseract-ocr-hin               Hindi language data
-libmagic1                       file type detection, used by python-magic
-libgl1  libglib2.0-0            image libraries needed by EasyOCR / OpenCV
+5. SYSTEM PACKAGES (Ubuntu)
+---------------------------
+Install:
+  sudo apt install python3.12-venv python3.12-dev build-essential \
+                   libmagic1 tesseract-ocr-tam tesseract-ocr-hin libgl1 libglib2.0-0
+Already installed: tesseract-ocr 5.3.4 with English (eng).
+  libmagic1                     file type detection (python-magic) — NOT installed
+  tesseract-ocr-tam / -hin      Tamil and Hindi OCR data — NOT installed
+  libgl1, libglib2.0-0          image libraries needed by EasyOCR / OpenCV
 
 
-5. GPU (for the LLM, embeddings, reranker and EasyOCR)
-------------------------------------------------------
-NVIDIA GPU driver and CUDA runtime that match the PyTorch build.
-Install the CUDA build of torch from the PyTorch package index for your CUDA version;
-the plain "pip install torch" build is enough for CPU-only development.
+6. LOCAL MODELS (small, CPU-friendly; download once, no downloads at runtime)
+----------------------------------------------------------------------------
+Generation LLM (through Ollama)
+  qwen2.5:3b              installed (1.9 GB)        default — best quality that fits this machine
+  qwen2.5:1.5b            ollama pull qwen2.5:1.5b  lighter option when RAM is short
+  llama3 (8B), gemma3     installed, but too big to run next to the other services on 7.5 GB
 
+Embedding model (sentence-transformers, inside the backend)
+  intfloat/multilingual-e5-small   118M parameters, 384 dimensions, 512-token limit, MIT license
+                                   English + Tamil + Hindi; needs "query: " / "passage: " prefixes
+                                   keep chunks at or below ~400 tokens
+  BAAI/bge-small-en-v1.5           33M parameters, MIT — faster, English only
+  (all-minilm in Ollama is English only with a 256-token limit, so it is not recommended)
 
-6. LOCAL MODEL FILES (download once during setup; no downloads at runtime)
--------------------------------------------------------------------------
-Record the exact revision and SHA-256 of every file. Use safetensors or GGUF formats only.
-Generation LLM      e.g. an 8B instruct model (GGUF for Ollama, safetensors / AWQ for vLLM)
-Embedding model     e.g. BGE-M3 or Qwen3-Embedding-0.6B
-Reranker            e.g. bge-reranker-v2-m3 or Qwen3-Reranker-0.6B
-Docling models      layout and table models: docling-tools models download
-EasyOCR weights     detection and recognition models for the configured languages
-Presidio NLP model  a spaCy model such as en_core_web_lg (PII detection)
-Evaluation judge    a local LLM served through Ollama or vLLM, used by DeepEval
-Set HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1 after the downloads.
+Reranker (cross-encoder, inside the backend)
+  cross-encoder/ms-marco-MiniLM-L6-v2   23M parameters, Apache-2.0 — fast on CPU, English
+  BAAI/bge-reranker-v2-m3               568M parameters, Apache-2.0 — multilingual but slow on CPU;
+                                        rerank only the top 10–20 candidates
+
+Other models
+  Docling layout and table models  download with: docling-tools models download (runs on CPU)
+  EasyOCR weights                  use gpu=False; only as a fallback when Tesseract is not enough
+  spaCy en_core_web_sm             for Presidio PII detection (smaller than en_core_web_lg)
+  Evaluation judge                 the same qwen2.5:3b through Ollama; small judges are less
+                                   reliable, so check their scores against human labels
+
+CPU settings
+  OMP_NUM_THREADS=4  and  torch.set_num_threads(4)   use the 4 physical cores
+  HF_HUB_OFFLINE=1  and  TRANSFORMERS_OFFLINE=1      after the downloads, never download at runtime
 
 
 7. FRONTEND PACKAGES (npm) — React app

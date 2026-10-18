@@ -1,6 +1,10 @@
 # Python packages for the RAG platform backend (Django + DRF).
+# CPU only: everything runs end to end on one local machine, no GPU.
 # Install:  python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 # Services, system packages, models and frontend packages are listed in dependency.txt (same folder).
+
+# CPU-only PyTorch builds (no CUDA / NVIDIA packages, much smaller download)
+--extra-index-url https://download.pytorch.org/whl/cpu
 
 # ---- Web API ----
 Django==5.2.18                     # LTS release
@@ -32,14 +36,15 @@ litellm==1.106.0
 docling==2.140.0
 pymupdf==1.28.2
 pytesseract==0.3.13                # needs the tesseract-ocr system package
-easyocr==1.7.2
+easyocr==1.7.2                     # run with gpu=False; fallback only, Tesseract first
 python-magic==0.4.27               # file type detection; needs libmagic
 
-# ---- Embeddings and reranking (local models) ----
+# ---- Embeddings and reranking (local models, on CPU) ----
 sentence-transformers==6.1.0
 transformers==5.17.0               # newer releases need huggingface-hub 1.31+ -> click 8.4+ (see deepeval)
 huggingface-hub==1.16.1            # last hub release before the click>=8.4 requirement
-torch==2.14.1                      # see dependency.txt for the CUDA build
+torch==2.14.1+cpu                  # CPU build from the PyTorch index above
+torchvision==0.29.1+cpu            # needed by EasyOCR; CPU build
 
 # ---- Privacy and guardrails ----
 presidio-analyzer==2.2.364
