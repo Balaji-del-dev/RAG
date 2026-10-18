@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RAG Evaluation Loop</title>
+<link rel="stylesheet" href="diagram.css">
+<link rel="stylesheet" href="flow.css">
+<style>
+  #canvas { width: 2180px; }
+  #regions { position: absolute; left: 0; top: 0; z-index: 0; }
+  .region { position: absolute; border-radius: 22px; border: 2px solid; }
+  .region .rl { position: absolute; top: 14px; left: 20px; font-size: 13px; font-weight: 800; letter-spacing: 1.1px; text-transform: uppercase; }
+  .loop { position: relative; z-index: 1; display: grid; grid-template-columns: 360px 300px 380px 300px 360px; column-gap: 80px; row-gap: 62px; padding: 64px 40px 40px; }
+  .node { margin-bottom: 0; }
+  .node .t { font-size: 15px; }
+  .c0 { grid-column: 1; } .c1 { grid-column: 2; } .c2 { grid-column: 3; } .c3 { grid-column: 4; } .c4 { grid-column: 5; }
+  .r0 { grid-row: 1; } .r1 { grid-row: 2; } .r2 { grid-row: 3; } .r3 { grid-row: 4; } .r4 { grid-row: 5; }
+  .dec { margin: 0; width: auto; align-self: center; padding: 14px 16px; font-size: 15px; }
+  .dec .s { display: block; font-size: 12px; font-weight: 500; color: var(--ink-2); margin-top: 3px; }
+  .node.gold { border-color: #f59e0b; background: #fffbeb; }
+  .node.metric { border-color: #c4b5fd; background: #faf8ff; }
+  .node.fail { border-color: #f2a9bf; background: #fff5f7; }
+  .node.rel { border-color: #86c49b; background: #f4fbf6; }
+  .node.pub { background: #15803d; border-color: #15803d; } .node.pub .t, .node.pub .d { color: #fff; }
+  .self { align-self: center; }
+</style>
+</head>
+<body>
+<div id="canvas">
+  <div id="regions"></div>
+  <svg id="edges"></svg>
+  <div id="edge-labels"></div>
+
+  <div class="title-row">
+    <div>
+      <h1>Evaluation, Tracing &amp; Continuous Improvement (v2)</h1>
+      <div class="sub">Every candidate pipeline is measured against a golden dataset and the current baseline before release; production feedback grows the dataset</div>
+    </div>
+    <div class="legend">
+      <span><span class="ac a-celery">Celery</span></span><span><span class="ac a-deepeval">DeepEval</span></span><span><span class="ac a-langfuse">Langfuse</span></span>
+      <span><span class="ac a-pg">PostgreSQL</span></span><span><span class="ac a-react">React</span></span><span><span class="ac a-human">Reviewer</span></span>
+    </div>
+  </div>
+
+  <div class="loop" id="loop">
+    <!-- centre: measure -->
+    <div class="node gold c2 r0" id="n-gold"><div class="t">Golden evaluation dataset</div><div class="d">versioned <span class="mono">evaluation_datasets</span> + <span class="mono">evaluation_cases</span>: question, expected answer, expected sources, case type (edge and abstention cases included)</div><div class="actors"><span class="ac a-pg">PostgreSQL</span></div></div>
+    <div class="node c2 r1" id="n-run"><div class="t">Run candidate pipeline</div><div class="d">Celery <span class="mono">evaluation</span> task runs the candidate pipeline version + index generation on every case → <span class="mono">evaluation_runs</span></div><div class="actors"><span class="ac a-celery">Celery</span><span class="ac a-pg">PostgreSQL</span></div></div>
+
+    <div class="node metric c1 r2" id="n-m1"><div class="t">Retrieval metrics</div><div class="d">recall@k · MRR · nDCG@k · hit rate against <span class="mono">expected_sources</span>, per case type</div><div class="actors"><span class="ac a-celery">Celery</span></div></div>
+    <div class="node metric c2 r2" id="n-m2"><div class="t">Generation &amp; citation metrics</div><div class="d">faithfulness · answer relevancy · contextual precision and recall · citation validity and coverage · correct abstentions — local LLM judge</div><div class="actors"><span class="ac a-deepeval">DeepEval</span></div></div>
+    <div class="node metric c3 r2" id="n-m3"><div class="t">Latency &amp; failure metrics</div><div class="d">p50 / p95 per stage · timeouts and errors · abstention rate · token usage</div><div class="actors"><span class="ac a-langfuse">Langfuse</span><span class="ac a-pg">PostgreSQL</span></div></div>
+
+    <div class="node c2 r3" id="n-cmp"><div class="t">Compare with baseline</div><div class="d">same dataset version · current published pipeline vs candidate · per-metric deltas and per-case regressions → <span class="mono">evaluation_results</span>, <span class="mono">summary_json</span></div><div class="actors"><span class="ac a-pg">PostgreSQL</span><span class="ac a-react">React</span></div></div>
+    <div class="dec c2 r4" id="n-dec">Acceptance criteria met?<span class="s">thresholds per metric · no regression beyond tolerance on any case type · latency budget</span></div>
+
+    <!-- left loop: improve -->
+    <div class="node fail c0 r1" id="n-imp"><div class="t">Improve parsing, chunking, retrieval or prompt</div><div class="d">change one variable at a time → new draft <span class="mono">pipeline_version</span> (and a new index generation when indexing changes)</div><div class="actors"><span class="ac a-django">Registry</span></div></div>
+    <div class="node fail c0 r4" id="n-ana"><div class="t">Analyze failure cases</div><div class="d"><span class="mono">failure_cases</span>: type, root cause, review status — grouped into parsing, chunking, retrieval or generation; traces in Langfuse</div><div class="actors"><span class="ac a-human">Reviewer</span><span class="ac a-langfuse">Langfuse</span></div></div>
+
+    <!-- right loop: release & learn -->
+    <div class="node rel c4 r4" id="n-app"><div class="t">Manual release approval</div><div class="d">reviewer signs off in the Evaluation Dashboard → <span class="mono">audit_events</span></div><div class="actors"><span class="ac a-human">Reviewer</span><span class="ac a-react">React</span></div></div>
+    <div class="node pub c4 r3" id="n-pub"><div class="t">Publish validated pipeline &amp; index</div><div class="d">pipeline version published (immutable) · index generation PUBLISHED · previous kept for rollback</div></div>
+    <div class="node rel c4 r2" id="n-obs"><div class="t">Observe queries &amp; feedback</div><div class="d"><span class="mono">retrieval_runs</span> · <span class="mono">answer_records</span> · <span class="mono">user_feedback</span> · Langfuse traces</div><div class="actors"><span class="ac a-pg">PostgreSQL</span><span class="ac a-langfuse">Langfuse</span></div></div>
+    <div class="node rel c4 r1" id="n-smp"><div class="t">Sample production quality</div><div class="d">periodic sample of real runs scored with DeepEval plus human review</div><div class="actors"><span class="ac a-deepeval">DeepEval</span><span class="ac a-human">Reviewer</span></div></div>
+    <div class="node rel c4 r0" id="n-add"><div class="t">Add reviewed cases to dataset</div><div class="d">reviewed questions with expected sources → new frozen dataset version</div><div class="actors"><span class="ac a-pg">PostgreSQL</span></div></div>
+  </div>
+
+  <div class="notes">
+    <section class="panel n"><h3>Release gate without CI/CD</h3><ul><li>evaluation runs are application workflows on Celery</li><li>approval is a manual, audited step in React</li><li>nothing publishes without a passing run on the current dataset version</li></ul></section>
+    <section class="panel n"><h3>Trustworthy LLM judging</h3><ul><li>DeepEval's judge runs locally through Ollama — no external API</li><li>small judges are noisier: calibrate against human-labelled cases</li><li>keep the judge model and version fixed across compared runs</li></ul></section>
+    <section class="panel n"><h3>Reproducible comparisons</h3><ul><li>runs pin dataset version, pipeline version and index generation</li><li>expected sources survive re-chunking (document + page / section)</li><li>per-case results make regressions visible, not just averages</li></ul></section>
+    <section class="panel n"><h3>Advanced retrieval is earned</h3><ul><li>query rewriting, multi-query, HyDE, decomposition, corrective retrieval and agentic routing</li><li>each enabled only when this loop shows a measurable gain</li></ul></section>
+  </div>
+</div>
+
+<script src="viewer.js"></script>
+<script src="diagram.js"></script>
+<script>
+function region(ids, label, border, fill, color, pad = 26, head = 34) {
+  const c = document.getElementById('canvas').getBoundingClientRect();
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+  for (const id of ids) {
+    const r = document.getElementById(id).getBoundingClientRect();
+    x1 = Math.min(x1, r.left - c.left); y1 = Math.min(y1, r.top - c.top);
+    x2 = Math.max(x2, r.right - c.left); y2 = Math.max(y2, r.bottom - c.top);
+  }
+  const d = document.createElement('div');
+  d.className = 'region';
+  Object.assign(d.style, { left: (x1 - pad) + 'px', top: (y1 - pad - head) + 'px', width: (x2 - x1 + 2 * pad) + 'px',
+    height: (y2 - y1 + 2 * pad + head) + 'px', borderColor: border, background: fill });
+  d.innerHTML = `<div class="rl" style="color:${color}">${label}</div>`;
+  document.getElementById('regions').appendChild(d);
+}
+whenLaidOut(() => {
+  region(['n-imp', 'n-ana'], 'Improve loop · before release', '#f6c4d2', '#fff9fb', '#be123c');
+  region(['n-gold', 'n-run', 'n-m1', 'n-m2', 'n-m3', 'n-cmp', 'n-dec'], 'Measure · every candidate', '#d6cdf7', '#fcfbff', '#6d28d9');
+  region(['n-add', 'n-smp', 'n-obs', 'n-pub', 'n-app'], 'Release &amp; learn loop · after approval', '#bfe3cb', '#f8fdf9', '#15803d');
+  const main = '#8a7fc0', no = '#e11d48', yes = '#15803d', up = '#15803d';
+  drawEdges([
+    { from: ['n-gold', 'bottom'], to: ['n-run', 'top'], color: main, width: 2.2 },
+    { from: ['n-run', 'bottom', 0.2], to: ['n-m1', 'top', 0.5], color: main, width: 2.2 },
+    { from: ['n-run', 'bottom', 0.5], to: ['n-m2', 'top', 0.5], color: main, width: 2.2 },
+    { from: ['n-run', 'bottom', 0.8], to: ['n-m3', 'top', 0.5], color: main, width: 2.2 },
+    { from: ['n-m1', 'bottom', 0.5], to: ['n-cmp', 'top', 0.2], color: main, width: 2.2 },
+    { from: ['n-m2', 'bottom', 0.5], to: ['n-cmp', 'top', 0.5], color: main, width: 2.2 },
+    { from: ['n-m3', 'bottom', 0.5], to: ['n-cmp', 'top', 0.8], color: main, width: 2.2 },
+    { from: ['n-cmp', 'bottom'], to: ['n-dec', 'top'], color: main, width: 2.2 },
+
+    { from: ['n-dec', 'left'], to: ['n-ana', 'right'], color: no, width: 2.4, label: 'no' },
+    { from: ['n-ana', 'top'], to: ['n-imp', 'bottom'], color: no, width: 2.4 },
+    { from: ['n-imp', 'right'], to: ['n-run', 'left'], color: no, width: 2.4, label: 're-run' },
+
+    { from: ['n-dec', 'right'], to: ['n-app', 'left'], color: yes, width: 2.4, label: 'yes' },
+    { from: ['n-app', 'top'], to: ['n-pub', 'bottom'], color: up, width: 2.4 },
+    { from: ['n-pub', 'top'], to: ['n-obs', 'bottom'], color: up, width: 2.4 },
+    { from: ['n-obs', 'top'], to: ['n-smp', 'bottom'], color: up, width: 2.4 },
+    { from: ['n-smp', 'top'], to: ['n-add', 'bottom'], color: up, width: 2.4 },
+    { from: ['n-add', 'left'], to: ['n-gold', 'right'], color: up, width: 2.4, label: 'new dataset version' },
+  ]);
+});
+</script>
+</body>
+</html>

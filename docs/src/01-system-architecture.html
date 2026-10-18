@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RAG System Architecture</title>
+<link rel="stylesheet" href="diagram.css">
+<style>
+  :root { --c-minio: #c2410c; --c-redis: #b91c1c; --c-quality: #6d28d9; }
+  #canvas { width: 2560px; }
+  .inset { margin-left: 70px; margin-right: 70px; }
+
+  .band { padding: 26px 26px 22px; }
+  .big h2 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+  .row { display: flex; gap: 18px; align-items: stretch; }
+  .actor { width: 260px; flex: none; border: 1.5px dashed #94a3b8; border-radius: 14px; display: flex; flex-direction: column; justify-content: center; padding: 14px 18px; background: #f8fafc; }
+  .actor h3 { font-size: 17px; }
+  .mod { flex: 1; border: 1.5px solid #cbd5e1; border-radius: 13px; padding: 12px 14px; background: #fff; }
+  .mod h3 { font-size: 15px; font-weight: 800; color: var(--c-client); }
+  .mod .d { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; line-height: 1.4; }
+
+  .band-api { border-color: #c7c9f5; background: #fbfbff; }
+  .api h2 { color: var(--c-api); }
+  .comp { flex: 1; border: 1.5px solid #c9cbf6; border-radius: 13px; padding: 12px 14px; background: #fff; }
+  .comp h3 { font-size: 15px; font-weight: 800; color: var(--c-api); }
+  .comp .d { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; line-height: 1.42; }
+  .comp .mono { font-size: 11.8px; }
+  .grp { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+  .grp .lbl { width: 118px; flex: none; font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .api .chip { background: #f8fafc; border-color: var(--line); color: var(--ink-2); }
+
+  .core { display: grid; grid-template-columns: 860px 360px 876px; column-gap: 112px; margin-top: 92px; align-items: stretch; }
+  .col { padding: 30px 20px 18px; }
+  .col > h2 { font-size: 20px; font-weight: 800; }
+  .col > .note { margin: 3px 0 16px; }
+
+  /* async */
+  .asy { border-color: #bfe3cb; background: #fbfefc; }
+  .asy h2 { color: var(--c-ingest); }
+  .broker { display: grid; grid-template-columns: 1.25fr 1fr; gap: 30px; margin-bottom: 26px; }
+  .bk { border-radius: 12px; padding: 10px 13px; border: 1.5px solid; background: #fff; }
+  .bk h3 { font-size: 14.5px; font-weight: 800; }
+  .bk .d { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; line-height: 1.42; }
+  .bk.redis { border-color: #fecaca; background: #fff7f7; } .bk.redis h3 { color: var(--c-redis); }
+  .bk.celery { border-color: #bfe3cb; } .bk.celery h3 { color: #14532d; }
+  .stage { border: 1.5px solid #c9e8d3; border-radius: 13px; background: #fff; padding: 11px 13px 13px; margin-bottom: 28px; }
+  .stage .sh { display: flex; align-items: baseline; gap: 10px; margin-bottom: 9px; }
+  .stage .sn { font-size: 11px; font-weight: 800; letter-spacing: 1.1px; color: #fff; background: var(--c-ingest); border-radius: 5px; padding: 2px 7px; }
+  .stage .st { font-size: 15.5px; font-weight: 700; color: #14532d; }
+  .steps { display: flex; gap: 8px; align-items: stretch; }
+  .step { flex: 1; border-radius: 10px; background: #f0faf3; border: 1px solid #d3eedc; padding: 8px 10px; }
+  .step .h { font-size: 13.5px; font-weight: 700; color: #14532d; display: flex; gap: 7px; align-items: center; }
+  .step .h b { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--c-ingest); color: #fff; font-size: 11.5px; display: inline-flex; align-items: center; justify-content: center; }
+  .step .s { font-size: 12px; color: var(--ink-2); margin-top: 4px; line-height: 1.38; }
+  .step.alt { background: #fffbeb; border-color: #fde68a; }
+  .step.alt .h b { background: #b45309; }
+  .arrow-s { align-self: center; color: #86c49b; font-size: 18px; font-weight: 700; }
+  .foot { border-top: 1.5px dashed #bfe3cb; padding-top: 11px; }
+  .foot b { color: #14532d; }
+
+  /* indexes */
+  .idx { border-color: #c7d2de; background: #fbfcfd; display: flex; flex-direction: column; }
+  .idx h2 { color: var(--ink-2); }
+  .idx .stack { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 40px; padding: 30px 0; }
+  .ix { border-radius: 13px; padding: 14px 15px; border: 2px solid; background: #fff; }
+  .ix h3 { font-size: 18px; font-weight: 800; }
+  .ix ul { margin: 8px 0 0 17px; font-size: 12.8px; line-height: 1.55; color: var(--ink-2); }
+  .ix.qd { border-color: #eeb3cb; background: #fff8fb; } .ix.qd h3 { color: var(--c-qdrant); }
+  .ix.os { border-color: #a9d7e1; background: #f5fbfc; } .ix.os h3 { color: var(--c-os); }
+  .gen { border: 1.5px solid #d5dbe4; border-radius: 12px; background: #fff; padding: 10px 12px; }
+  .gen .t { font-size: 12.5px; font-weight: 800; color: var(--ink-2); font-family: "Noto Sans Mono", monospace; }
+  .gen .l { font-size: 12.3px; line-height: 1.5; color: var(--ink-2); margin-top: 4px; }
+  .gen .mono { font-size: 11.6px; }
+  .gate { border: 1.5px dashed #94a3b8; border-radius: 12px; padding: 10px 12px; font-size: 12.5px; line-height: 1.45; color: var(--ink-2); background: #fff; }
+
+  /* online rag */
+  .ret { border-color: #c3d4f7; background: #fbfcff; }
+  .ret h2 { color: var(--c-retrieval); }
+  .rgrid { display: grid; grid-template-columns: 590px 220px; column-gap: 26px; }
+  .q { border: 1.5px solid #cfdcf8; border-radius: 12px; background: #fff; padding: 9px 13px; margin-bottom: 24px; }
+  .q .h { font-size: 14.5px; font-weight: 700; color: #1e3a8a; display: flex; align-items: center; gap: 8px; }
+  .q .h .k { font-size: 10.5px; font-weight: 800; letter-spacing: .8px; padding: 2px 7px; border-radius: 5px; color: #fff; }
+  .q .s { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; line-height: 1.4; }
+  .q.accent { background: #eff4ff; }
+  .q.par { background: #f7f9ff; border-style: dashed; padding: 9px 13px 11px; }
+  .q.par .sub { border: 1.5px solid; border-radius: 10px; padding: 7px 11px; margin-top: 8px; background: #fff; }
+  .q.par .sub.dense { border-color: #f2bfd4; background: #fff7fa; } .q.par .sub.dense .h { color: #9d174d; }
+  .q.par .sub.lex { border-color: #b4dde6; background: #f4fbfd; } .q.par .sub.lex .h { color: #155e75; }
+  .q.llm { border-color: #ddd6fe; background: #faf8ff; } .q.llm .h { color: #5b21b6; }
+  .q.answer { background: #1d4ed8; border-color: #1d4ed8; margin-bottom: 14px; }
+  .q.answer .h, .q.answer .s { color: #fff; }
+  .dec { margin: 0 auto 24px; width: 300px; text-align: center; border: 1.5px dashed #93acdf; background: #f5f8ff; border-radius: 999px; padding: 8px 12px; font-size: 14px; font-weight: 800; color: #1e3a8a; }
+  .side { border: 1.5px solid #f2a9bf; background: #fff1f4; border-radius: 12px; padding: 9px 12px; font-size: 12.5px; color: #881337; line-height: 1.4; }
+  .side b { display: block; font-size: 13.5px; color: #9f1239; margin-bottom: 2px; }
+  .ret .foot { border-top-color: #c3d4f7; }
+  .ret .foot b { color: #1e3a8a; }
+
+  /* durable data layer */
+  .durable { margin-top: 96px; padding: 28px 22px 20px; border-width: 2px; border-color: #b8c6d6; background: #f7f9fb; }
+  .durable > h2 { font-size: 20px; font-weight: 800; color: var(--ink-2); }
+  .durable > .note { margin: 2px 0 14px; }
+  .dgrid { display: grid; grid-template-columns: 560px 1fr; gap: 26px; }
+  .store { border-radius: 14px; padding: 15px 18px; border: 2px solid; background: #fff; }
+  .store h3 { font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+  .store .role { font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; padding: 3px 8px; border-radius: 5px; color: #fff; }
+  .store .d { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin-top: 6px; }
+  .minio { border-color: #f3c9ad; background: #fffaf6; } .minio h3 { color: var(--c-minio); }
+  .minio pre { margin-top: 9px; font-size: 12px; line-height: 1.5; color: #431407; background: #fff; border: 1px solid #f1d5c2; border-radius: 10px; padding: 8px 11px; }
+  .risk { margin-top: 9px; font-size: 12.3px; color: #7f1d1d; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 9px; padding: 7px 10px; line-height: 1.45; }
+  .pg { border-color: #9fb6cf; background: #f6f9fc; } .pg h3 { color: var(--c-pg); }
+  .pg .cols { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 12px; }
+  .pg .g { background: #fff; border: 1px solid #c9d6e4; border-radius: 10px; padding: 8px 10px; }
+  .pg .g .t { font-size: 11.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--c-pg); }
+  .pg .g .l { font-size: 11.6px; color: var(--ink-2); line-height: 1.5; margin-top: 3px; font-family: "Noto Sans Mono", monospace; }
+
+  /* quality & operations */
+  .quality { margin-top: 64px; padding: 30px 22px 20px; border-width: 2px; border-color: #d8ccf5; background: #fcfbff; }
+  .quality > h2 { font-size: 20px; font-weight: 800; color: var(--c-quality); margin-bottom: 14px; }
+  .qgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+  .qc { border: 1.5px solid #e2d9fb; border-radius: 13px; background: #fff; padding: 13px 15px; }
+  .qc h3 { font-size: 16px; font-weight: 800; color: #4c1d95; }
+  .qc .d { font-size: 12.8px; color: var(--ink-2); line-height: 1.5; margin-top: 4px; }
+  .qc .warn { margin-top: 8px; font-size: 12.3px; color: #7f1d1d; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 9px; padding: 7px 10px; line-height: 1.45; }
+
+  .bottom { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; margin-top: 30px; }
+  .rules, .scope { padding: 18px 20px; border-color: #d5dbe4; }
+  .rules h3, .scope h3 { font-size: 15.5px; font-weight: 800; color: var(--ink-2); margin-bottom: 8px; }
+  .rules ol { margin-left: 20px; font-size: 13px; line-height: 1.6; color: var(--ink-2); columns: 2; column-gap: 30px; }
+  .scope .chips { margin-top: 6px; }
+  .scope .chip.in { background: #f0faf3; border-color: #bfe3cb; color: #14532d; }
+  .scope .chip.out { background: #f8fafc; color: #64748b; text-decoration: line-through; text-decoration-color: #cbd5e1; }
+  .scope .lbl { font-size: 11.5px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-top: 10px; }
+</style>
+</head>
+<body>
+<div id="canvas">
+  <svg id="edges"></svg>
+  <div id="edge-labels"></div>
+
+  <div class="title-row">
+    <div>
+      <h1>Offline Hybrid RAG Platform — System Architecture (v2)</h1>
+      <div class="sub">Upload-only ingestion · one application deployment · React · Django + DRF · Celery + Redis · PostgreSQL · MinIO · Qdrant · OpenSearch · LiteLLM → Ollama / vLLM · Langfuse · DeepEval</div>
+    </div>
+    <div class="legend">
+      <span><i></i> synchronous call</span>
+      <span><i class="dash"></i> asynchronous task / trace</span>
+      <span><b class="sw" style="background:var(--c-api)"></b> application</span>
+      <span><b class="sw" style="background:var(--c-ingest)"></b> async processing</span>
+      <span><b class="sw" style="background:var(--c-retrieval)"></b> online RAG</span>
+      <span><b class="sw" style="background:var(--c-pg)"></b><b class="sw" style="background:var(--c-minio)"></b> source of truth</span>
+      <span><b class="sw" style="background:var(--c-qdrant)"></b><b class="sw" style="background:var(--c-os)"></b> derived indexes</span>
+      <span><b class="sw" style="background:var(--c-quality)"></b> quality &amp; ops</span>
+    </div>
+  </div>
+
+  <!-- 1 REACT -->
+  <section class="panel band big inset" id="client">
+    <div class="tag" style="background:var(--c-client)">1 · React application</div>
+    <div class="row">
+      <div class="actor"><h3>Users · Admins · Evaluators</h3><div class="note">browser on the local network</div></div>
+      <div class="mod"><h3>File Upload</h3><div class="d">multipart upload with progress; duplicate-detection message</div></div>
+      <div class="mod"><h3>Document Management</h3><div class="d">versions, lifecycle status, retry, delete</div></div>
+      <div class="mod"><h3>Pipeline Configuration</h3><div class="d">components, models, retrieval and generation settings; publish versions</div></div>
+      <div class="mod"><h3>RAG Chat &amp; Citations</h3><div class="d">streamed answers, citation viewer, abstentions, feedback</div></div>
+      <div class="mod"><h3>Evaluation Dashboard</h3><div class="d">runs vs baseline, failure cases, release approval</div></div>
+    </div>
+  </section>
+
+  <!-- 2 DJANGO -->
+  <section class="panel band band-api api big inset" id="api" style="margin-top:80px">
+    <div class="tag" style="background:var(--c-api)">2 · Django + DRF application</div>
+    <h2>Django + Django REST Framework — APIs, business logic and orchestration</h2>
+    <div class="note" style="margin-bottom:12px">Django coordinates; Celery does the long-running work. Configuration JSON is schema-validated and mapped to allow-listed implementations.</div>
+    <div class="row">
+      <div class="comp" id="c-rest"><h3>REST API</h3><div class="d">DRF views + serializers · OpenAPI schema · auth · rate limits</div></div>
+      <div class="comp" id="c-upload"><h3>Upload Validation</h3><div class="d">extension · sniffed MIME (never the browser's) · size · content · SHA-256 duplicate check</div></div>
+      <div class="comp" id="c-pipe"><h3>Pipeline Orchestrator</h3><div class="d">creates jobs and <span class="mono">outbox_events</span> in one transaction; the dispatcher publishes them to Celery</div></div>
+      <div class="comp" id="c-query"><h3>Query Orchestrator</h3><div class="d">runs the online RAG flow synchronously and streams the answer</div></div>
+      <div class="comp" id="c-reg"><h3>Component &amp; Model Registry</h3><div class="d">pipeline versions · components · models · retrieval &amp; generation definitions</div></div>
+    </div>
+    <div class="grp"><div class="lbl">Cross-cutting</div><div class="chips">
+      <span class="chip">request ID + trace ID</span><span class="chip">JSON-Schema validation</span><span class="chip">audit_events</span>
+      <span class="chip">immutable published versions</span><span class="chip">idempotency keys</span><span class="chip">structured logs</span>
+    </div></div>
+  </section>
+
+  <!-- CORE -->
+  <div class="core inset">
+    <!-- 4 ASYNC -->
+    <section class="panel col asy" id="asy">
+      <div class="tag" style="background:var(--c-ingest)">4 · Asynchronous processing</div>
+      <h2>Ingestion &amp; indexing on Celery workers</h2>
+      <div class="note">each enabled pipeline step runs as a retryable <span class="mono">processing_step_runs</span> row</div>
+      <div class="broker">
+        <div class="bk celery" id="celery"><h3>Celery workers</h3><div class="d">late acks · retries with backoff · idempotent tasks · task events visible in Flower</div></div>
+        <div class="bk redis" id="redis"><h3>Redis</h3><div class="d">Celery broker and transient state only — queues <span class="mono">ingest</span> · <span class="mono">index</span> · <span class="mono">evaluation</span></div></div>
+      </div>
+      <div class="stage" id="s1">
+        <div class="sh"><span class="sn">STAGE 1</span><span class="st">Read &amp; extract</span></div>
+        <div class="steps">
+          <div class="step"><div class="h"><b>1</b>Read original</div><div class="s">from MinIO; re-check SHA-256</div></div>
+          <div class="arrow-s">→</div>
+          <div class="step"><div class="h"><b>2</b>Docling + PyMuPDF</div><div class="s">text, pages, layout, tables</div></div>
+          <div class="arrow-s">→</div>
+          <div class="step alt"><div class="h"><b>3</b>OCR fallback</div><div class="s">Tesseract or EasyOCR when extracted text is insufficient</div></div>
+        </div>
+      </div>
+      <div class="stage" id="s2">
+        <div class="sh"><span class="sn">STAGE 2</span><span class="st">Clean &amp; structure</span></div>
+        <div class="steps">
+          <div class="step"><div class="h"><b>4</b>Normalize content</div><div class="s">encoding, whitespace, hyphenation</div></div>
+          <div class="arrow-s">→</div>
+          <div class="step"><div class="h"><b>5</b>Reconstruct structure</div><div class="s">headings, sections, tables, page map</div></div>
+          <div class="arrow-s">→</div>
+          <div class="step"><div class="h"><b>6</b>Local enrichment</div><div class="s">optional metadata and labels</div></div>
+        </div>
+      </div>
+      <div class="stage" id="s3">
+        <div class="sh"><span class="sn">STAGE 3</span><span class="st">Chunk</span></div>
+        <div class="steps">
+          <div class="step"><div class="h"><b>7</b>Chunk + provenance</div><div class="s">pages, section path, parent-child links</div></div>
+          <div class="arrow-s">→</div>
+          <div class="step"><div class="h"><b>8</b>Chunk quality checks</div><div class="s">empty, oversized, duplicate, broken tables</div></div>
+          <div class="arrow-s">→</div>
+          <div class="step"><div class="h"><b>9</b>Persist canonical chunks</div><div class="s">full text in PostgreSQL</div></div>
+        </div>
+      </div>
+      <div class="stage" id="s4">
+        <div class="sh"><span class="sn">STAGE 4</span><span class="st">Embed &amp; index</span></div>
+        <div class="steps">
+          <div class="step"><div class="h"><b>10</b>Local embeddings</div><div class="s">pinned model and revision; batched</div></div>
+          <div class="arrow-s">→</div>
+          <div class="step" style="flex:1.5"><div class="h"><b>11</b>Index builder</div><div class="s">upsert Qdrant points and bulk-index OpenSearch for one index generation, keyed by chunk ID</div></div>
+        </div>
+      </div>
+      <div class="stage" id="s5" style="margin-bottom:16px">
+        <div class="sh"><span class="sn">STAGE 5</span><span class="st">Validate &amp; publish</span></div>
+        <div class="steps">
+          <div class="step"><div class="h"><b>12</b>Validate generation</div><div class="s">counts, missing / duplicate / orphaned records, smoke searches</div></div>
+          <div class="arrow-s">→</div>
+          <div class="step"><div class="h"><b>13</b>Publish or fail</div><div class="s">publish only when both indexes pass; otherwise mark failed, retry or reconcile</div></div>
+        </div>
+      </div>
+      <div class="note foot"><b>First release formats:</b> PDF · DOCX · XLSX · PPTX · TXT · Markdown · CSV · JSON · XML · HTML. Image understanding, handwriting and visual embeddings come later, once the text/table pipeline is measurable.</div>
+    </section>
+
+    <!-- 5 INDEXES -->
+    <section class="panel col idx" id="idx">
+      <div class="tag" style="background:var(--ink-2)">5 · Retrieval indexes</div>
+      <h2>Derived indexes</h2>
+      <div class="note">one coordinated generation names both</div>
+      <div class="gen"><div class="t">index_generations · g0042</div>
+        <div class="l">qdrant_collection = <span class="mono">rag_chunks_g0042</span><br>opensearch_index = <span class="mono">rag_chunks_v042</span><br>status <span class="mono">BUILDING → VALIDATING → PUBLISHED</span></div></div>
+      <div class="stack">
+        <div class="ix qd" id="qd"><h3>Qdrant</h3><ul><li>dense vectors · HNSW</li><li>collection per generation</li><li>point ID = chunk ID</li><li>payload filters: document, version, generation, page</li></ul></div>
+        <div class="gate">Published only after <b>both</b> indexes pass validation — never one ahead of the other.</div>
+        <div class="ix os" id="os"><h3>OpenSearch</h3><ul><li>BM25 full-text + exact keywords</li><li>versioned index per generation</li><li>explicit mappings &amp; analyzers</li><li><span class="mono">_id</span> = chunk ID</li></ul></div>
+      </div>
+      <div class="gen"><div class="t">Rollback &amp; rebuild</div>
+        <div class="l">the previous generation stays until nothing references it · both indexes can be rebuilt from canonical chunks in PostgreSQL (vectors are re-embedded)</div></div>
+    </section>
+
+    <!-- 6 ONLINE RAG -->
+    <section class="panel col ret" id="ret">
+      <div class="tag" style="background:var(--c-retrieval)">6 · Online RAG · Query Orchestrator</div>
+      <h2>Question → grounded, cited answer</h2>
+      <div class="note">an answer is not grounded just because the LLM returned text</div>
+      <div class="rgrid">
+        <div>
+          <div class="q accent" id="q1"><div class="h">Request validation</div><div class="s">schema and length checks · create request ID and trace ID</div></div>
+          <div class="q" id="q2"><div class="h">Query understanding &amp; planning</div><div class="s">normalize and classify · select the published pipeline + index generation · build the retrieval plan</div></div>
+          <div class="q par" id="qpar"><div class="h">Hybrid retrieval — both run in parallel</div>
+            <div class="sub dense" id="qa"><div class="h"><span class="k" style="background:var(--c-qdrant)">QDRANT</span>Dense retrieval</div><div class="s">embed query locally · top-k · payload filter</div></div>
+            <div class="sub lex" id="qb"><div class="h"><span class="k" style="background:var(--c-os)">OPENSEARCH</span>Lexical retrieval</div><div class="s">BM25 · top-k · same filter</div></div>
+          </div>
+          <div class="q" id="q4"><div class="h">RRF fusion &amp; deduplication</div><div class="s">normalize candidates · Σ 1/(k + rank), k = 60 · dedupe by chunk</div></div>
+          <div class="q" id="q5"><div class="h">Cross-encoder reranker</div><div class="s">local model · optional MMR and parent expansion</div></div>
+          <div class="q" id="q6"><div class="h">Context assembly &amp; evidence check</div><div class="s">token budget · source validation</div></div>
+          <div class="dec" id="d1">Sufficient evidence?</div>
+          <div class="q llm" id="q7"><div class="h">Grounded generation</div><div class="s">grounded prompt → <b>LiteLLM</b> gateway (routing, retries, timeouts) → <b>Ollama or vLLM</b></div></div>
+          <div class="q" id="q8"><div class="h">Output &amp; citation validation</div><div class="s">answer schema · citation references · grounding and safety checks</div></div>
+          <div class="dec" id="d2">Valid answer?</div>
+          <div class="q answer" id="q9"><div class="h">Persist answer &amp; evidence → respond</div><div class="s">answer, citations and status back to React</div></div>
+        </div>
+        <div style="position:relative">
+          <div class="side" id="n1" style="position:absolute; left:0; right:0;"><b>Abstain or ask</b>no answer is generated; ask a clarifying question</div>
+          <div class="side" id="n2" style="position:absolute; left:0; right:0;"><b>Reject, repair once or abstain</b>never return an unvalidated answer</div>
+        </div>
+      </div>
+      <div class="note foot"><b>Start with a measurable baseline.</b> Query rewriting, multi-query, HyDE, decomposition, corrective retrieval and agentic routing are enabled only when evaluation shows a gain.</div>
+    </section>
+  </div>
+
+  <!-- 3 DURABLE DATA LAYER -->
+  <section class="panel durable inset" id="durable">
+    <div class="tag" style="background:var(--c-pg)">3 · Durable data layer · sources of truth</div>
+    <div class="dgrid">
+      <div class="store minio" id="minio">
+        <h3>MinIO <span class="role" style="background:var(--c-minio)">file contents</span></h3>
+        <div class="d">Originals, extracted artifacts, OCR output, generated files — reached only through the S3 API.</div>
+<pre class="mono">rag-originals/documents/&lt;document_id&gt;/v&lt;n&gt;/&lt;sha256&gt;.&lt;ext&gt;
+rag-artifacts/&lt;document_version_id&gt;/&lt;job_id&gt;/…
+rag-exports/evaluations/&lt;run_id&gt;/…</pre>
+        <div class="risk"><b>Supply risk:</b> the community edition is source-only since Oct 2025 (repository later archived) — pin a self-built release or use another S3-compatible store.</div>
+      </div>
+      <div class="store pg" id="pg">
+        <h3>PostgreSQL <span class="role" style="background:var(--c-pg)">metadata &amp; lifecycle</span></h3>
+        <div class="d">Configuration, document lifecycle, canonical chunk text, jobs, index state, query history, evaluation and audit — 33 tables in six groups.</div>
+        <div class="cols">
+          <div class="g"><div class="t">4.1 Config</div><div class="l">pipeline_definitions<br>pipeline_versions<br>pipeline_steps<br>component_definitions<br>model_definitions<br>retrieval_definitions<br>generation_definitions</div></div>
+          <div class="g"><div class="t">4.2 Documents</div><div class="l">documents<br>document_versions<br>document_metadata<br>extracted_artifacts<br>storage_objects</div></div>
+          <div class="g"><div class="t">4.3 Processing</div><div class="l">processing_jobs<br>processing_step_runs<br>document_elements<br>chunks<br>chunk_relationships<br>embedding_records</div></div>
+          <div class="g"><div class="t">4.4 Index</div><div class="l">index_generations<br>index_build_jobs<br>index_memberships<br>index_validations<br>outbox_events</div></div>
+          <div class="g"><div class="t">4.5 Retrieval</div><div class="l">retrieval_runs<br>retrieval_results<br>answer_records<br>user_feedback<br>failure_cases</div></div>
+          <div class="g"><div class="t">4.6 Eval &amp; audit</div><div class="l">evaluation_datasets<br>evaluation_cases<br>evaluation_runs<br>evaluation_results<br>audit_events</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 QUALITY & OPERATIONS -->
+  <section class="panel quality inset" id="quality">
+    <div class="tag" style="background:var(--c-quality)">7 · Quality &amp; operations</div>
+    <h2>Observe, evaluate, improve</h2>
+    <div class="qgrid">
+      <div class="qc" id="flower"><h3>Flower</h3><div class="d">Celery worker and task visibility: queues, retries, failures, runtimes. Reads task events through the Redis broker.</div></div>
+      <div class="qc" id="deepeval"><h3>DeepEval</h3><div class="d">Retrieval and answer quality tests (faithfulness, answer relevancy, contextual precision and recall) run as Celery <span class="mono">evaluation</span> tasks; results land in <span class="mono">evaluation_results</span>. The LLM judge runs locally through Ollama — calibrate it against human-labelled cases.</div></div>
+      <div class="qc" id="feedback"><h3>User feedback &amp; failure analysis</h3><div class="d">Ratings in <span class="mono">user_feedback</span>; reviewed problems in <span class="mono">failure_cases</span> with root cause and resolution. Reviewed cases are added to the golden dataset.</div></div>
+      <div class="qc" id="langfuse"><h3>Langfuse</h3><div class="d">Request traces, prompts, model calls and timings, joined to <span class="mono">retrieval_runs.trace_id</span>. Send IDs and metrics by default; prompts and document text only where policy allows.</div>
+        <div class="warn"><b>Scope conflict:</b> Langfuse v3 self-hosting needs PostgreSQL, ClickHouse, Redis and S3 storage and ships as Docker Compose or Kubernetes — decide on that exception before building.</div></div>
+    </div>
+  </section>
+
+  <div class="bottom">
+    <section class="panel rules">
+      <h3>Architecture rules</h3>
+      <ol>
+        <li>PostgreSQL is the source of truth for metadata and lifecycle state.</li>
+        <li>MinIO is the source of truth for stored file contents.</li>
+        <li>Qdrant and OpenSearch are derived indexes, not the document store.</li>
+        <li>Django coordinates work; Celery handles long-running operations.</li>
+        <li>Index publication waits for validation across both search systems.</li>
+        <li>An answer is not grounded just because the LLM returned text.</li>
+        <li>All model files and runtime dependencies are available locally.</li>
+      </ol>
+    </section>
+    <section class="panel scope">
+      <h3>Explicit scope</h3>
+      <div class="lbl">In scope</div>
+      <div class="chips"><span class="chip in">upload-only ingestion</span><span class="chip in">one application deployment</span><span class="chip in">release validation as app workflows + manual steps</span></div>
+      <div class="lbl">Out of scope</div>
+      <div class="chips"><span class="chip out">external connectors</span><span class="chip out">web-search fallback</span><span class="chip out">multi-tenancy</span><span class="chip out">Docker</span><span class="chip out">Kubernetes</span><span class="chip out">CI/CD platform</span><span class="chip out">Prometheus</span><span class="chip out">Logstash / ELK</span></div>
+    </section>
+  </div>
+</div>
+
+<script src="viewer.js"></script>
+<script src="diagram.js"></script>
+<script>
+const col = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function placeSide(id, anchorId) {
+  // align a side note vertically with its decision pill
+  const side = document.getElementById(id), a = document.getElementById(anchorId);
+  const parent = side.parentElement.getBoundingClientRect(), r = a.getBoundingClientRect();
+  side.style.top = (r.top - parent.top + r.height / 2 - side.getBoundingClientRect().height / 2) + "px";
+}
+placeSide("n1", "d1");
+placeSide("n2", "d2");
+whenLaidOut(() => {
+  const c = {
+    client: col('--c-client'), api: col('--c-api'), ret: col('--c-retrieval'), pg: col('--c-pg'),
+    mn: col('--c-minio'), qd: col('--c-qdrant'), os: col('--c-os'), q: col('--c-quality'), rd: col('--c-redis'),
+  };
+  const soft = '#8fb0ee', green = '#86c49b', no = '#e11d48';
+  drawEdges([
+    // 1 -> 2
+    { from: ['client', 'bottom'], fromX: ['c-rest', 'cx'], to: ['api', 'top'], toX: ['c-rest', 'cx'], color: c.client, both: true,
+      label: 'HTTPS · JSON · multipart upload · streamed answers', width: 2.4 },
+
+    // 2 -> durable layer (upload path) through the left gutter
+    { from: ['api', 'left', 0.62], to: ['durable', 'left', 0.40], x: ['canvas', 'left', 88], color: c.mn, width: 2.4, seg: 1,
+      label: 'Upload Validation: original → MinIO · document version + job + outbox → PostgreSQL in one transaction', rotate: true },
+
+    // 2 -> core
+    { from: ['api', 'bottom'], fromX: ['c-pipe', 'cx'], to: ['redis', 'top', 0.5], y: ['api', 'bottom', 42], color: c.rd, dash: true, label: 'outbox dispatcher → Celery task', width: 2.4 },
+    { from: ['api', 'bottom'], fromX: ['c-query', 'cx'], to: ['ret', 'top'], toX: ['ret', 'right', -150], color: c.ret, both: true, label: 'question · streamed answer', width: 2.4 },
+
+    // redis -> celery -> stages
+    { from: ['redis', 'left', 0.5], to: ['celery', 'right', 0.5], color: c.rd, dash: true, width: 2 },
+    { from: ['celery', 'bottom', 0.5], to: ['s1', 'top'], toX: ['celery', 'cx'], color: green, width: 2 },
+    { from: ['s1', 'bottom'], to: ['s2', 'top'], color: green, width: 2 },
+    { from: ['s2', 'bottom'], to: ['s3', 'top'], color: green, width: 2 },
+    { from: ['s3', 'bottom'], to: ['s4', 'top'], color: green, width: 2 },
+    { from: ['s4', 'bottom'], to: ['s5', 'top'], color: green, width: 2 },
+
+    // index builder -> indexes ; online retrieval -> indexes
+    { from: ['s4', 'right', 0.35], to: ['qd', 'left', 0.5], color: c.qd, dash: true, label: 'upsert<br>points', width: 2.3, x: ['asy', 'right', 38] },
+    { from: ['s4', 'right', 0.75], to: ['os', 'left', 0.5], color: c.os, dash: true, label: 'bulk<br>index', width: 2.3, x: ['asy', 'right', 74] },
+    { from: ['qa', 'left', 0.5], to: ['qd', 'right', 0.5], color: c.qd, label: 'dense<br>top-k', width: 2.3, x: ['idx', 'right', 38] },
+    { from: ['qb', 'left', 0.5], to: ['os', 'right', 0.5], color: c.os, label: 'BM25<br>top-k', width: 2.3, x: ['idx', 'right', 76] },
+
+    // online flow
+    { from: ['q1', 'bottom'], to: ['q2', 'top'], color: soft, width: 2 },
+    { from: ['q2', 'bottom'], to: ['qpar', 'top'], color: soft, width: 2 },
+    { from: ['qpar', 'bottom'], to: ['q4', 'top'], color: soft, width: 2 },
+    { from: ['q4', 'bottom'], to: ['q5', 'top'], color: soft, width: 2 },
+    { from: ['q5', 'bottom'], to: ['q6', 'top'], color: soft, width: 2 },
+    { from: ['q6', 'bottom'], to: ['d1', 'top'], color: soft, width: 2 },
+    { from: ['d1', 'bottom'], to: ['q7', 'top'], color: c.ret, width: 2, label: 'yes' },
+    { from: ['d1', 'right'], to: ['n1', 'left'], color: no, width: 2, label: 'no' },
+    { from: ['q7', 'bottom'], to: ['q8', 'top'], color: soft, width: 2 },
+    { from: ['q8', 'bottom'], to: ['d2', 'top'], color: soft, width: 2 },
+    { from: ['d2', 'bottom'], to: ['q9', 'top'], color: c.ret, width: 2, label: 'yes' },
+    { from: ['d2', 'right'], to: ['n2', 'left'], color: no, width: 2, label: 'no' },
+    { from: ['n2', 'bottom', 0.5], to: ['q9', 'right', 0.3], color: no, width: 2 },
+    { from: ['n1', 'right', 0.5], to: ['q9', 'right', 0.72], color: no, width: 2, x: ['n1', 'right', 14] },
+
+    // core -> durable data layer
+    { from: ['asy', 'bottom', 0.46], to: ['minio', 'top'], toX: ['asy', 'left', 0.46 * 860], color: c.mn, both: true, label: 'read originals · write artifacts', width: 2.4, t: 0.28 },
+    { from: ['asy', 'bottom', 0.88], to: ['pg', 'top'], toX: ['asy', 'left', 0.88 * 860], color: c.pg, both: true, label: 'jobs · step runs · chunks · embedding records', width: 2.4, t: 0.28 },
+    { from: ['ret', 'bottom', 0.40], to: ['pg', 'top'], toX: ['ret', 'left', 0.40 * 876], color: c.pg, both: true, label: 'published generation · runs · answers &amp; evidence', width: 2.4, t: 0.28 },
+
+    // traces -> Langfuse through the right gutter
+    { from: ['ret', 'right', 0.05], to: ['langfuse', 'right', 0.3], x: ['canvas', 'right', -88], color: c.q, dash: true, width: 2.2, seg: 1,
+      label: 'traces · spans · token counts → Langfuse', rotate: true },
+  ]);
+});
+</script>
+</body>
+</html>

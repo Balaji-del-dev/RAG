@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RAG Data Architecture</title>
+<link rel="stylesheet" href="diagram.css">
+<style>
+  :root { --c-minio: #c2410c; }
+  #canvas { width: 2720px; }
+
+  .top { display: grid; grid-template-columns: 520px 930px 290px 600px; column-gap: 90px; align-items: start; }
+  .card { padding: 30px 22px 20px; border-width: 2px; }
+  .card > h2 { font-size: 23px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+  .card > .lead { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; margin-top: 6px; }
+  .role { font-size: 11.5px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; padding: 3px 8px; border-radius: 5px; color: #fff; }
+
+  /* MinIO */
+  .minio { border-color: #f3c9ad; background: #fffaf6; }
+  .minio h2 { color: var(--c-minio); }
+  .tree { margin-top: 14px; background: #fff; border: 1px solid #f1d5c2; border-radius: 12px; padding: 13px 14px; font-size: 12.5px; line-height: 1.62; color: #431407; white-space: pre; }
+  .tree .c { color: #b98c70; }
+  .tree b { color: var(--c-minio); }
+  .rules { margin-top: 14px; }
+  .rules h4, .sec h4 { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .rules ul { margin-left: 17px; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
+  .risk { margin-top: 14px; border: 1.5px solid #fca5a5; background: #fef2f2; border-radius: 12px; padding: 11px 13px; font-size: 12.8px; line-height: 1.5; color: #7f1d1d; }
+  .risk b { color: #991b1b; }
+
+  /* postgres */
+  .pg { border-color: #9fb6cf; background: #f6f9fc; }
+  .pg h2 { color: var(--c-pg); }
+  .groups { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 18px; margin-top: 16px; align-items: start; }
+  .gcol { display: flex; flex-direction: column; gap: 16px; }
+  .grp { background: #fff; border: 1.5px solid #c9d6e4; border-radius: 13px; padding: 12px 14px; }
+  .grp .gh { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .grp .gt { font-size: 14.5px; font-weight: 800; }
+  .grp .app { font-size: 11.5px; font-weight: 700; color: var(--muted); font-family: "Noto Sans Mono", monospace; white-space: nowrap; }
+  .grp .tables { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .grp .tables span { font-family: "Noto Sans Mono", monospace; font-size: 12px; background: #eef3f9; border: 1px solid #d4e0ec; color: #1e3a5f; border-radius: 6px; padding: 2px 7px; }
+  .grp .gn { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; margin-top: 8px; }
+  .grp.outbox { border-color: #94a3b8; border-style: dashed; background: #fbfcfd; }
+  .tagx { font-size: 10px; font-weight: 800; color: #92400e; background: #fde68a; border-radius: 4px; padding: 1px 5px; margin-left: 6px; vertical-align: 2px; }
+  .pg .rules ul { columns: 2; column-gap: 26px; }
+
+  /* dispatch & sync */
+  .sync { padding: 24px 16px 16px; border-color: #b9c2cf; border-width: 2px; margin-top: 210px; }
+  .sync h3 { font-size: 16px; font-weight: 800; color: var(--ink-2); margin-top: 2px; }
+  .sync .sub3 { font-size: 11.5px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; margin: 14px 0 5px; }
+  .sync ol { margin: 4px 0 0 18px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+  .sync ol li { margin-bottom: 5px; }
+  .sync pre { font-size: 11px; line-height: 1.45; background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; margin: 6px 0 2px -18px; white-space: pre-wrap; color: #1e293b; }
+  .redis { margin-top: 10px; border: 1.5px solid #fecaca; background: #fff7f7; border-radius: 10px; padding: 9px 11px; font-size: 12.3px; line-height: 1.45; color: var(--ink-2); }
+  .redis b { color: #b91c1c; }
+
+  /* indexes */
+  .idx-col { display: flex; flex-direction: column; gap: 46px; }
+  .qd { border-color: #eeb3cb; background: #fff8fb; }
+  .qd h2 { color: var(--c-qdrant); }
+  .os { border-color: #a9d7e1; background: #f5fbfc; }
+  .os h2 { color: var(--c-os); }
+  .kv { margin-top: 12px; display: grid; grid-template-columns: 112px 1fr; gap: 6px 10px; font-size: 12.8px; line-height: 1.45; }
+  .kv .k { font-weight: 700; color: var(--muted); font-size: 12px; letter-spacing: .3px; text-transform: uppercase; padding-top: 1px; }
+  .kv .v { color: var(--ink-2); }
+  .kv .v .mono { font-size: 12.2px; color: #111827; }
+  .qd .kv .v .mono b { color: var(--c-qdrant); }
+  .os .kv .v .mono b { color: var(--c-os); }
+
+  /* bottom sections */
+  .mid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 26px; margin-top: 64px; }
+  .sec { padding: 26px 22px 20px; border-width: 2px; }
+  .sec > h3 { font-size: 19px; font-weight: 800; margin-bottom: 4px; }
+  .sec > .lead { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+
+  table.ids { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.8px; }
+  table.ids th { text-align: left; font-size: 11.5px; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 2px solid var(--line); }
+  table.ids td { padding: 8px 10px; border-bottom: 1px solid #e8ebf0; vertical-align: top; color: var(--ink-2); line-height: 1.4; }
+  table.ids td:first-child { font-family: "Noto Sans Mono", monospace; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  table.ids td .mono { font-size: 12.2px; }
+  table.ids tr.key td { background: #f3f7ff; }
+  th.pgc { color: var(--c-pg) !important; } th.mnc { color: var(--c-minio) !important; } th.qdc { color: var(--c-qdrant) !important; } th.osc { color: var(--c-os) !important; } th.lfc { color: #6d28d9 !important; }
+
+  .lc { margin-bottom: 14px; }
+  .lc .t { font-size: 13.5px; font-weight: 800; color: var(--ink); margin-bottom: 7px; font-family: "Noto Sans Mono", monospace; }
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .flow .s { font-size: 11.8px; font-weight: 700; padding: 4px 9px; border-radius: 999px; border: 1.5px solid; white-space: nowrap; font-family: "Noto Sans Mono", monospace; }
+  .flow .ar { color: #94a3b8; font-weight: 700; }
+  .s.g { color: #166534; border-color: #86c49b; background: #f0faf3; }
+  .s.b { color: #1e3a8a; border-color: #9db6ee; background: #eff4ff; }
+  .s.a { color: #fff; border-color: #15803d; background: #15803d; }
+  .s.n { color: #475569; border-color: #cbd5e1; background: #f8fafc; }
+  .s.r { color: #9f1239; border-color: #f2a9bf; background: #fff1f4; }
+  .lc .note { margin-top: 6px; }
+
+  .flows { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin-top: 26px; }
+  .fl { padding: 24px 20px 18px; border-width: 2px; }
+  .fl h3 { font-size: 17px; font-weight: 800; margin-bottom: 10px; }
+  .fl ol { list-style: none; counter-reset: n; }
+  .fl li { counter-increment: n; position: relative; padding-left: 34px; font-size: 13px; line-height: 1.5; color: var(--ink-2); margin-bottom: 9px; }
+  .fl li::before { content: counter(n); position: absolute; left: 0; top: 1px; width: 23px; height: 23px; border-radius: 50%; color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .fl.w { border-color: #bfe3cb; } .fl.w h3 { color: var(--c-ingest); } .fl.w li::before { background: var(--c-ingest); }
+  .fl.p { border-color: #d9c8fb; } .fl.p h3 { color: var(--c-config); } .fl.p li::before { background: var(--c-config); }
+  .fl.r { border-color: #c3d4f7; } .fl.r h3 { color: var(--c-retrieval); } .fl.r li::before { background: var(--c-retrieval); }
+  .fl.d { border-color: #f3c9ad; } .fl.d h3 { color: var(--c-minio); } .fl.d li::before { background: var(--c-minio); }
+  .fl .mono { font-size: 12.2px; color: #111827; }
+
+  .callout { margin-top: 26px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .co { border-radius: 14px; padding: 16px 18px; background: #0f172a; color: #e2e8f0; font-size: 13.3px; line-height: 1.55; }
+  .co b { color: #fff; display: block; font-size: 14.5px; margin-bottom: 4px; }
+  .co .mono { color: #fde68a; font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div id="canvas">
+  <svg id="edges"></svg>
+  <div id="edge-labels"></div>
+
+  <div class="title-row">
+    <div>
+      <h1>Data &amp; Storage Architecture (v2) — ownership, identity and synchronisation</h1>
+      <div class="sub">PostgreSQL is the source of truth for metadata and lifecycle · MinIO for file contents · Qdrant and OpenSearch are derived, generation-versioned indexes</div>
+    </div>
+    <div class="legend">
+      <span><i></i> reference by ID / object key</span>
+      <span><i class="dash"></i> asynchronous delivery (outbox → Redis → Celery)</span>
+      <span><b class="sw" style="background:var(--c-pg)"></b> metadata · lifecycle</span>
+      <span><b class="sw" style="background:var(--c-minio)"></b> file contents</span>
+      <span><b class="sw" style="background:var(--c-qdrant)"></b><b class="sw" style="background:var(--c-os)"></b> derived · rebuildable</span>
+    </div>
+  </div>
+
+  <div class="top">
+    <!-- MINIO -->
+    <section class="panel card minio" id="minio">
+      <div class="tag" style="background:var(--c-minio)">Source of truth · file contents</div>
+      <h2>MinIO <span class="role" style="background:var(--c-minio)">S3 API</span></h2>
+      <div class="lead">Owns bytes: uploaded originals, parser and OCR output, generated files. PostgreSQL stores <b>bucket + object key + object version + SHA-256</b>. Django and Celery reach it only through the S3 API (boto3 / django-storages).</div>
+<div class="tree mono" id="mn-tree"><b>rag-originals/</b>              <span class="c"># versioning on</span>
+└── documents/&lt;document_id&gt;/
+    └── v&lt;version_number&gt;/&lt;sha256&gt;.&lt;ext&gt;
+<b>rag-artifacts/</b>
+└── &lt;document_version_id&gt;/&lt;job_id&gt;/
+    ├── docling.json · pymupdf.json
+    ├── ocr/page-0001.json
+    ├── normalized.md · structure.json
+    └── tables/table-001.csv
+<b>rag-exports/</b>                <span class="c"># generated files</span>
+└── evaluations/&lt;evaluation_run_id&gt;/</div>
+      <div class="rules">
+        <h4>Rules</h4>
+        <ul>
+          <li>object keys are generated by Django — never the client's filename</li>
+          <li>bucket versioning on originals; <span class="mono">storage_version_id</span> pins the exact object</li>
+          <li>SHA-256 computed on upload and re-checked when a worker reads the object</li>
+          <li>objects are deleted only after lifecycle checks: no published generation or retained version still references them</li>
+        </ul>
+      </div>
+      <div class="risk"><b>Supply risk:</b> MinIO's community edition has been source-only since October 2025 and its repository was later archived. Pin a release you build and verify yourself, or swap in another S3-compatible store (SeaweedFS, Garage, Ceph RGW) — behind the S3 API boundary that is a configuration change.</div>
+    </section>
+
+    <!-- POSTGRESQL -->
+    <section class="panel card pg" id="pg">
+      <div class="tag" style="background:var(--c-pg)">Source of truth · metadata &amp; lifecycle</div>
+      <h2>PostgreSQL <span class="role" style="background:var(--c-pg)">system of record</span></h2>
+      <div class="lead">Owns configuration, document lifecycle, canonical chunk text, jobs, index state, query history, evaluation and audit. Typed columns for IDs, scores, statuses and timestamps; <b>JSONB</b> for schema-validated configuration, citations and diagnostics.</div>
+      <div class="groups">
+        <div class="gcol">
+          <div class="grp" id="g-cfg">
+            <div class="gh"><span class="gt" style="color:#7c3aed">4.1 Pipeline configuration</span><span class="app">app: registry</span></div>
+            <div class="tables"><span>pipeline_definitions</span><span>pipeline_versions</span><span>pipeline_steps</span><span>component_definitions</span><span>model_definitions</span><span>retrieval_definitions</span><span>generation_definitions</span></div>
+            <div class="gn">Drafts are edited; published versions are immutable. <span class="mono">implementation_key</span> maps to an allow-listed class.</div>
+          </div>
+          <div class="grp" id="g-doc">
+            <div class="gh"><span class="gt" style="color:#c2410c">4.2 Documents &amp; MinIO references</span><span class="app">app: documents</span></div>
+            <div class="tables"><span>documents</span><span>document_versions</span><span>document_metadata</span><span>extracted_artifacts</span><span>storage_objects</span></div>
+            <div class="gn"><span class="mono">document_versions</span> and <span class="mono">extracted_artifacts</span> carry <span class="mono">storage_bucket</span> + <span class="mono">storage_object_key</span>; <span class="mono">storage_objects</span> is the optional shared registry.</div>
+          </div>
+          <div class="grp" id="g-proc">
+            <div class="gh"><span class="gt" style="color:#15803d">4.3 Processing &amp; canonical chunks</span><span class="app">app: processing</span></div>
+            <div class="tables"><span>processing_jobs</span><span>processing_step_runs</span><span>document_elements</span><span>chunks</span><span>chunk_relationships</span><span>embedding_records</span></div>
+            <div class="gn">Full chunk text lives here; vectors live in Qdrant, with point ID and model version in <span class="mono">embedding_records</span>.</div>
+          </div>
+        </div>
+        <div class="gcol">
+          <div class="grp" id="g-idx">
+            <div class="gh"><span class="gt" style="color:#0e7490">4.4 Index lifecycle</span><span class="app">app: indexing</span></div>
+            <div class="tables"><span>index_generations</span><span>index_build_jobs</span><span>index_memberships</span><span>index_validations</span></div>
+            <div class="gn">One generation names a compatible Qdrant collection <i>and</i> OpenSearch index; memberships map every chunk to both.</div>
+          </div>
+          <div class="grp outbox" id="g-out">
+            <div class="gh"><span class="gt" style="color:#475569">Transactional outbox<span class="tagx">ADDED</span></span><span class="app">app: core</span></div>
+            <div class="tables"><span>outbox_events</span></div>
+            <div class="gn">Written in the <b>same transaction</b> as the job, chunk or delete it announces: <span class="mono">job.dispatch</span>, <span class="mono">index.upsert</span>, <span class="mono">index.delete</span>.</div>
+          </div>
+          <div class="grp" id="g-ret">
+            <div class="gh"><span class="gt" style="color:#1d4ed8">4.5 Retrieval, answers &amp; feedback</span><span class="app">app: retrieval</span></div>
+            <div class="tables"><span>retrieval_runs</span><span>retrieval_results</span><span>answer_records</span><span>user_feedback</span><span>failure_cases</span></div>
+            <div class="gn"><span class="mono">request_id</span> and <span class="mono">trace_id</span> join a run to its Langfuse trace.</div>
+          </div>
+          <div class="grp" id="g-eval">
+            <div class="gh"><span class="gt" style="color:#be185d">4.6 Evaluation &amp; audit</span><span class="app">app: evaluation</span></div>
+            <div class="tables"><span>evaluation_datasets</span><span>evaluation_cases</span><span>evaluation_runs</span><span>evaluation_results</span><span>audit_events</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="rules">
+        <h4>Database conventions</h4>
+        <ul>
+          <li>UUID primary keys; FKs and check constraints everywhere</li>
+          <li>status columns are enums (Django <span class="mono">TextChoices</span>)</li>
+          <li>schema changes only through Django migrations</li>
+          <li>JSONB for flexible detail; never for IDs, scores or statuses</li>
+          <li>partition <span class="mono">retrieval_results</span> / <span class="mono">audit_events</span> only when volume demands it</li>
+          <li>backups: PostgreSQL PITR + MinIO versioned buckets; indexes are rebuildable</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- DISPATCH & SYNC -->
+    <section class="panel sync" id="sync">
+      <div class="tag" style="background:var(--c-ops)">Dispatch &amp; sync</div>
+      <h3>Outbox dispatcher</h3>
+      <ol>
+        <li>Claim pending rows
+<pre class="mono">SELECT … FROM outbox_events
+WHERE status='PENDING'
+  AND available_at &lt;= now()
+ORDER BY id
+FOR UPDATE SKIP LOCKED
+LIMIT 200;</pre></li>
+        <li>Publish the Celery task, then mark the row <span class="mono">DISPATCHED</span></li>
+      </ol>
+      <div class="redis" id="redis"><b>Redis</b> — Celery broker only. Losing it loses queued messages, never state: undelivered rows are re-dispatched from the outbox.</div>
+      <div class="sub3" style="color:#0e7490">Celery index builder</div>
+      <ol>
+        <li>Upsert / delete in Qdrant and OpenSearch keyed by <span class="mono">chunks.id</span> — safe to repeat</li>
+        <li>Update <span class="mono">index_memberships</span>; retry with backoff; failures stay visible for reconciliation</li>
+      </ol>
+    </section>
+
+    <!-- INDEXES -->
+    <div class="idx-col">
+      <section class="panel card qd" id="qd">
+        <div class="tag" style="background:var(--c-qdrant)">Derived · dense vectors</div>
+        <h2>Qdrant</h2>
+        <div class="kv">
+          <div class="k">Collection</div><div class="v"><span class="mono"><b>rag_chunks_g0042</b></span> — one per generation, recorded in <span class="mono">index_generations.qdrant_collection</span></div>
+          <div class="k">Point ID</div><div class="v"><span class="mono">chunks.id</span> (UUID) — also kept as <span class="mono">qdrant_point_id</span> / <span class="mono">vector_point_id</span></div>
+          <div class="k">Vector</div><div class="v">size = embedding model dimension · metric chosen for the model (usually Cosine) · HNSW</div>
+          <div class="k">Payload</div><div class="v"><span class="mono">chunk_id, document_id, document_version_id, index_generation_id, page_start, page_end, section_path, content_hash</span></div>
+          <div class="k">Payload idx</div><div class="v">keyword on <span class="mono">document_id</span>, <span class="mono">document_version_id</span>, <span class="mono">index_generation_id</span>; integer on <span class="mono">page_start</span></div>
+          <div class="k">Rule</div><div class="v">one embedding model revision and dimension per collection</div>
+        </div>
+      </section>
+      <section class="panel card os" id="os">
+        <div class="tag" style="background:var(--c-os)">Derived · lexical</div>
+        <h2>OpenSearch</h2>
+        <div class="kv">
+          <div class="k">Index</div><div class="v"><span class="mono"><b>rag_chunks_v042</b></span> — versioned name per generation, recorded in <span class="mono">index_generations.opensearch_index</span></div>
+          <div class="k">_id</div><div class="v"><span class="mono">chunks.id</span> — kept as <span class="mono">opensearch_document_id</span></div>
+          <div class="k">Mappings</div><div class="v">keyword: <span class="mono">chunk_id, document_id, document_version_id, index_generation_id, content_hash</span> · analyzed text: <span class="mono">text_content</span> · text + keyword: <span class="mono">filename, section_path</span> · integer: <span class="mono">page_start, page_end</span> · <span class="mono">dynamic: strict</span></div>
+          <div class="k">Scoring</div><div class="v">BM25 baseline; analyzers and exact-match boosts only when evaluation shows a gain</div>
+          <div class="k">Bulk build</div><div class="v"><span class="mono">refresh_interval: -1</span> while building, restored before validation</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- IDENTITY + LIFECYCLE -->
+  <div class="mid">
+    <section class="panel sec" id="ids">
+      <div class="tag" style="background:var(--ink-2)">Identity map</div>
+      <h3>Stable identifiers shared across stores</h3>
+      <div class="lead">The same IDs appear in PostgreSQL, MinIO object keys, Qdrant, OpenSearch and Langfuse, so any record can be joined, diffed, re-indexed or traced.</div>
+      <table class="ids">
+        <tr><th>Identifier</th><th>How it is generated</th><th class="pgc">PostgreSQL</th><th class="mnc">MinIO</th><th class="qdc">Qdrant</th><th class="osc">OpenSearch</th><th class="lfc">Langfuse</th></tr>
+        <tr><td>document_id</td><td>UUID when a new logical document is uploaded</td><td>documents.id</td><td>key prefix <span class="mono">documents/&lt;id&gt;/</span></td><td>payload</td><td>keyword</td><td>—</td></tr>
+        <tr><td>document_version_id</td><td>UUID for each new content hash</td><td>document_versions.id</td><td><span class="mono">rag-artifacts/&lt;id&gt;/</span></td><td>payload</td><td>keyword</td><td>—</td></tr>
+        <tr><td>content_sha256</td><td>SHA-256 of the uploaded bytes</td><td>document_versions.content_sha256</td><td>object name</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td>storage_version_id</td><td>MinIO object version (versioned bucket)</td><td>document_versions.storage_version_id</td><td>version id</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr class="key"><td>chunk_id</td><td><span class="mono">uuid5(NS, version_id · pipeline_version_id · chunk_index · content_hash)</span> — re-runs produce the same ID</td><td>chunks.id</td><td>—</td><td><b>point id</b></td><td><b>_id</b></td><td>span metadata</td></tr>
+        <tr><td>index_generation_id</td><td>UUID + <span class="mono">generation_number</span> per pipeline version</td><td>index_generations.id</td><td>—</td><td>collection + payload</td><td>index + keyword</td><td>trace metadata</td></tr>
+        <tr><td>request_id · trace_id</td><td>created when a question arrives</td><td>retrieval_runs</td><td>—</td><td>—</td><td>—</td><td><b>trace id</b></td></tr>
+      </table>
+    </section>
+
+    <section class="panel sec" id="life">
+      <div class="tag" style="background:var(--ink-2)">Lifecycles</div>
+      <h3>State machines stored in PostgreSQL</h3>
+      <div class="lead">Status columns drive Celery workers, the React UI and cleanup jobs.</div>
+      <div class="lc"><div class="t">document_versions.status</div>
+        <div class="flow"><span class="s n">UPLOADED</span><span class="ar">→</span><span class="s n">VALIDATING</span><span class="ar">→</span><span class="s g">QUEUED</span><span class="ar">→</span><span class="s g">PROCESSING</span><span class="ar">→</span><span class="s b">INDEXING</span><span class="ar">→</span><span class="s b">VALIDATING_INDEX</span><span class="ar">→</span><span class="s a">PUBLISHED</span></div>
+        <div class="flow" style="margin-top:6px"><span class="s r">FAILED</span><span class="ar">·</span><span class="s n">SUPERSEDED</span><span class="ar">·</span><span class="s n">DELETED</span></div></div>
+      <div class="lc"><div class="t">index_generations.status</div>
+        <div class="flow"><span class="s n">BUILDING</span><span class="ar">→</span><span class="s b">VALIDATING</span><span class="ar">→</span><span class="s a">PUBLISHED</span><span class="ar">→</span><span class="s n">RETIRED</span><span class="ar">·</span><span class="s r">FAILED</span></div></div>
+      <div class="lc"><div class="t">processing_jobs.status · index_build_jobs.status</div>
+        <div class="flow"><span class="s n">QUEUED</span><span class="ar">→</span><span class="s g">RUNNING</span><span class="ar">→</span><span class="s a">SUCCEEDED</span><span class="ar">·</span><span class="s r">FAILED → RETRY</span><span class="ar">·</span><span class="s n">CANCELLED</span></div></div>
+      <div class="lc"><div class="t">index_memberships.status · outbox_events.status</div>
+        <div class="flow"><span class="s n">PENDING</span><span class="ar">→</span><span class="s a">INDEXED / DISPATCHED</span><span class="ar">·</span><span class="s r">FAILED → RETRY</span><span class="ar">·</span><span class="s n">REMOVED</span></div></div>
+      <div class="lc" style="margin-bottom:0"><div class="t">failure_cases.review_status</div>
+        <div class="flow"><span class="s n">OPEN</span><span class="ar">→</span><span class="s b">IN_REVIEW</span><span class="ar">→</span><span class="s a">RESOLVED</span><span class="ar">·</span><span class="s n">WONT_FIX</span></div></div>
+    </section>
+  </div>
+
+  <!-- FLOWS -->
+  <div class="flows">
+    <section class="panel fl w">
+      <div class="tag" style="background:var(--c-ingest)">Write path</div>
+      <h3>Upload &amp; ingest a document</h3>
+      <ol>
+        <li>Django checks extension, sniffed MIME type, size and content, then SHA-256; an exact duplicate returns the existing status.</li>
+        <li>Original → MinIO under a generated key; <b>one transaction</b> writes <span class="mono">document_versions</span>, <span class="mono">processing_jobs</span> and an <span class="mono">outbox_events</span> row.</li>
+        <li>The dispatcher publishes the Celery task via Redis; workers read MinIO and write artifacts back as <span class="mono">extracted_artifacts</span>.</li>
+        <li>Canonical chunks and <span class="mono">embedding_records</span> go to PostgreSQL; the index builder fills Qdrant and OpenSearch and marks memberships.</li>
+        <li>Failed steps keep their error; retries reuse the same chunk IDs, so nothing is duplicated.</li>
+      </ol>
+    </section>
+    <section class="panel fl p">
+      <div class="tag" style="background:var(--c-config)">Coordinated publication</div>
+      <h3>Publish an index generation</h3>
+      <ol>
+        <li>Build the new Qdrant collection and OpenSearch index for generation N+1.</li>
+        <li>Compare expected and actual counts; check for missing, duplicate and orphaned records.</li>
+        <li>Run dense, lexical and hybrid smoke searches; store each result in <span class="mono">index_validations</span>.</li>
+        <li><b>One PostgreSQL transaction</b> marks N+1 <i>PUBLISHED</i> and N <i>RETIRED</i> — only after both indexes pass.</li>
+        <li>Keep N for rollback; drop it once no run, evaluation or retention rule references it.</li>
+      </ol>
+    </section>
+    <section class="panel fl r">
+      <div class="tag" style="background:var(--c-retrieval)">Read path</div>
+      <h3>Answer a question</h3>
+      <ol>
+        <li>Read the published <span class="mono">index_generation</span> → both physical names; create <span class="mono">retrieval_runs</span> with request and trace IDs.</li>
+        <li>Dense (Qdrant) and BM25 (OpenSearch) with the same filters → <span class="mono">retrieval_results</span> with original ranks and scores.</li>
+        <li>RRF + dedupe by chunk ID → <span class="mono">fusion_rank</span>; cross-encoder → <span class="mono">reranker_score</span>.</li>
+        <li>Context comes from canonical chunk text in PostgreSQL; the answer and <span class="mono">citation_data</span> → <span class="mono">answer_records</span>.</li>
+        <li>Langfuse spans carry IDs, timings and token counts; prompts and document text only where policy allows.</li>
+      </ol>
+    </section>
+    <section class="panel fl d">
+      <div class="tag" style="background:var(--c-minio)">Change &amp; delete</div>
+      <h3>New versions and deletions</h3>
+      <ol>
+        <li>A changed file → new <span class="mono">document_versions</span> row (<span class="mono">parent_version_id</span> = previous); the old one becomes <i>SUPERSEDED</i> once the new one is <i>PUBLISHED</i>.</li>
+        <li>Superseded or deleted chunks leave both indexes through <span class="mono">index.delete</span> outbox events.</li>
+        <li>Delete → <span class="mono">deleted_at</span> + <i>DELETED</i>; invalidated in both indexes before any MinIO cleanup.</li>
+        <li>MinIO objects are removed only after lifecycle checks; <span class="mono">storage_objects</span> prevents deleting shared bytes.</li>
+        <li><span class="mono">audit_events</span> records uploads, publications, deletions and configuration changes.</li>
+      </ol>
+    </section>
+  </div>
+
+  <div class="callout">
+    <div class="co"><b>PostgreSQL decides which generation is live</b>Qdrant and OpenSearch cannot switch together, so a generation becomes live by one PostgreSQL commit. The query orchestrator then addresses both physical names from that row; aliases are only for operators and tools.</div>
+    <div class="co"><b>Why an outbox in front of Celery</b>Publishing from <span class="mono">transaction.on_commit</span> still loses the task if the process dies after COMMIT but before Redis receives it. The outbox row survives that crash and is re-dispatched; idempotent tasks make a double dispatch harmless.</div>
+    <div class="co"><b>Indexes are rebuildable</b>Vectors live only in Qdrant, so a rebuild re-embeds from canonical chunk text in PostgreSQL. To skip re-embedding, export each generation's vectors to <span class="mono">rag-artifacts/</span> in MinIO.</div>
+  </div>
+</div>
+
+<script src="viewer.js"></script>
+<script src="diagram.js"></script>
+<script>
+const col = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+whenLaidOut(() => {
+  const mn = col('--c-minio'), ops = col('--c-ops'), qd = col('--c-qdrant'), os = col('--c-os');
+  drawEdges([
+    { from: ['g-doc', 'left', 0.35], to: ['mn-tree', 'right', 0.14], color: mn, label: 'originals', width: 2.3, x: ['minio', 'right', 45] },
+    { from: ['g-doc', 'left', 0.70], to: ['mn-tree', 'right', 0.52], color: mn, label: 'artifacts', width: 2.3, x: ['minio', 'right', 45] },
+    { from: ['g-out', 'right', 0.5], to: ['sync', 'left', 0.16], color: ops, dash: true, label: 'claim', width: 2.3, x: ['pg', 'right', 45] },
+    { from: ['sync', 'right', 0.72], to: ['qd', 'left', 0.55], color: qd, dash: true, label: 'upsert<br>delete', width: 2.3, x: ['sync', 'right', 30] },
+    { from: ['sync', 'right', 0.86], to: ['os', 'left', 0.40], color: os, dash: true, label: 'bulk<br>index', width: 2.3, x: ['sync', 'right', 62] },
+  ]);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+/* Shared styles for the process-flow diagrams (04–06). */
+.fl-cols { display: grid; grid-template-columns: repeat(4, 570px); column-gap: 100px; align-items: stretch; }
+.fcol { padding: 30px 18px 16px; border-width: 2px; }
+.fcol > h2 { font-size: 19px; font-weight: 800; }
+.fcol > .note { margin: 2px 0 18px; }
+.lane { display: grid; grid-template-columns: 196px 334px; column-gap: 22px; }
+.lane .side-col { position: relative; }
+
+.node { border: 1.5px solid #cfd7e3; border-radius: 12px; background: #fff; padding: 9px 12px 10px; margin-bottom: 30px; position: relative; }
+.node:last-child { margin-bottom: 0; }
+.node .t { font-size: 14.5px; font-weight: 700; color: var(--ink); }
+.node .d { font-size: 12.4px; color: var(--ink-2); margin-top: 3px; line-height: 1.4; }
+.node .d .mono { font-size: 11.6px; }
+.actors { display: flex; gap: 4px; margin-top: 7px; flex-wrap: wrap; }
+.ac { font-size: 10px; font-weight: 800; letter-spacing: .6px; color: #fff; border-radius: 4px; padding: 1px 6px; text-transform: uppercase; }
+.a-react { background: #334155; } .a-django { background: #4338ca; } .a-pg { background: #2f5d8a; }
+.a-minio { background: #c2410c; } .a-redis { background: #b91c1c; } .a-celery { background: #15803d; }
+.a-qdrant { background: #be185d; } .a-os { background: #0e7490; } .a-litellm { background: #6d28d9; }
+.a-llm { background: #7c3aed; } .a-langfuse { background: #5b21b6; } .a-deepeval { background: #a21caf; }
+.a-human { background: #64748b; }
+
+.node.hl { border-color: #93c5fd; background: #f5f9ff; }
+.node.store { border-style: solid; border-color: #9fb6cf; background: #f6f9fc; }
+.node.ok { background: #15803d; border-color: #15803d; }
+.node.ok .t, .node.ok .d { color: #fff; }
+.split2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 30px; }
+.split2 .node { margin-bottom: 0; }
+
+.dec { margin: 0 auto 30px; width: 270px; text-align: center; border: 1.6px dashed #8aa2c8; background: #f5f8ff; border-radius: 999px; padding: 9px 12px; font-size: 14px; font-weight: 800; color: #1e3a8a; }
+.out { position: absolute; left: 0; right: 0; border: 1.5px solid; border-radius: 12px; padding: 8px 11px; font-size: 12.3px; line-height: 1.4; }
+.out b { display: block; font-size: 13.3px; margin-bottom: 2px; }
+.out.err { border-color: #f2a9bf; background: #fff1f4; color: #881337; } .out.err b { color: #9f1239; }
+.out.neutral { border-color: #cbd5e1; background: #f8fafc; color: #334155; } .out.neutral b { color: #0f172a; }
+.out.alt { border-color: #fde68a; background: #fffbeb; color: #78350f; } .out.alt b { color: #92400e; }
+
+.divider { border-top: 1.5px dashed #94a3b8; margin: -10px 0 20px; padding-top: 7px; font-size: 11.8px; color: var(--muted); line-height: 1.4; text-align: center; }
+.divider b { color: var(--ink-2); }
+
+.rail { margin-top: 34px; padding: 18px 22px; border-width: 2px; }
+.rail h3 { font-size: 15px; font-weight: 800; color: var(--ink-2); margin-bottom: 10px; }
+.rail .track { display: grid; grid-template-columns: repeat(4, 570px); column-gap: 100px; }
+.rail .seg { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rail .st { font-family: "Noto Sans Mono", monospace; font-size: 12px; font-weight: 700; padding: 4px 9px; border-radius: 999px; border: 1.5px solid #cbd5e1; background: #f8fafc; color: #334155; }
+.rail .st.g { border-color: #86c49b; background: #f0faf3; color: #166534; }
+.rail .st.b { border-color: #9db6ee; background: #eff4ff; color: #1e3a8a; }
+.rail .st.a { border-color: #15803d; background: #15803d; color: #fff; }
+.rail .st.r { border-color: #f2a9bf; background: #fff1f4; color: #9f1239; }
+.rail .ar { color: #94a3b8; font-weight: 700; }
+.rail .cap { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+.notes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; margin-top: 26px; }
+.notes .n { padding: 15px 17px; border-color: #d5dbe4; }
+.notes h3 { font-size: 15px; font-weight: 800; color: var(--ink-2); margin-bottom: 6px; }
+.notes ul { margin-left: 17px; font-size: 12.8px; color: var(--ink-2); line-height: 1.55; }
+.notes .mono { font-size: 12px; }

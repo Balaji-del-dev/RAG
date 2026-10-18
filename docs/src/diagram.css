@@ -1,0 +1,100 @@
+/* Shared base styles for the architecture diagrams (rendered to PNG by render.py). */
+:root {
+  --ink: #0f172a;
+  --ink-2: #334155;
+  --muted: #64748b;
+  --line: #d9dee7;
+  --bg: #f5f6f8;
+  --card: #ffffff;
+
+  --c-client: #334155;
+  --c-api: #4338ca;
+  --c-config: #7c3aed;
+  --c-ingest: #15803d;
+  --c-models: #b45309;
+  --c-retrieval: #1d4ed8;
+  --c-pg: #2f5d8a;
+  --c-fs: #7a5c3e;
+  --c-qdrant: #be185d;
+  --c-os: #0e7490;
+  --c-ops: #475569;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  font-family: "Noto Sans", "Liberation Sans", "DejaVu Sans", sans-serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+#canvas {
+  position: relative;
+  background: var(--bg);
+  padding: 44px 52px 48px;
+}
+
+#edges { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 2; overflow: visible; }
+#edge-labels { position: absolute; left: 0; top: 0; z-index: 3; }
+
+.edge-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  background: #fff;
+  border: 1.5px solid;
+  border-radius: 999px;
+  padding: 3px 11px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.mono { font-family: "Noto Sans Mono", "DejaVu Sans Mono", "Liberation Mono", monospace; }
+
+/* Title block */
+.title-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 30px; gap: 40px; }
+.title-row h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.4px; }
+.title-row .sub { margin-top: 6px; font-size: 17px; color: var(--ink-2); }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 13.5px; color: var(--ink-2); justify-content: flex-end; max-width: 820px; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.legend i { display: inline-block; width: 30px; height: 0; border-top: 2.5px solid var(--ink-2); }
+.legend i.dash { border-top-style: dashed; }
+.legend b.sw { display: inline-block; width: 14px; height: 14px; border-radius: 4px; }
+
+/* Generic cards */
+.panel {
+  background: var(--card);
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  position: relative;
+}
+.panel > .tag {
+  position: absolute;
+  top: -12px;
+  left: 18px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #f8fafc;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.note { font-size: 12.5px; color: var(--muted); line-height: 1.45; }

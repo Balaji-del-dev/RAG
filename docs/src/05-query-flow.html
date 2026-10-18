@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RAG Query Flow</title>
+<link rel="stylesheet" href="diagram.css">
+<link rel="stylesheet" href="flow.css">
+<style>
+  #canvas { width: 2684px; }
+  .cA { border-color: #c7c9f5; background: #fbfbff; } .cA h2 { color: var(--c-api); }
+  .cB { border-color: #c3d4f7; background: #fbfcff; } .cB h2 { color: var(--c-retrieval); }
+  .cC { border-color: #ddd6fe; background: #fcfbff; } .cC h2 { color: #5b21b6; }
+  .cD { border-color: #bfe3cb; background: #fbfefc; } .cD h2 { color: var(--c-ingest); }
+  .rail .chip { font-size: 12px; }
+  .a-embed { background: #9d174d; } .a-rerank { background: #1e40af; }
+</style>
+</head>
+<body>
+<div id="canvas">
+  <svg id="edges"></svg>
+  <div id="edge-labels"></div>
+
+  <div class="title-row">
+    <div>
+      <h1>Online Retrieval &amp; Generation Flow (v2)</h1>
+      <div class="sub">From a question in React to a validated, cited answer — or an explicit abstention. Runs synchronously in the Django Query Orchestrator.</div>
+    </div>
+    <div class="legend">
+      <span><span class="ac a-react">React</span></span><span><span class="ac a-django">Django</span></span><span><span class="ac a-pg">PostgreSQL</span></span>
+      <span><span class="ac a-embed">Embedder</span></span><span><span class="ac a-qdrant">Qdrant</span></span><span><span class="ac a-os">OpenSearch</span></span>
+      <span><span class="ac a-rerank">Reranker</span></span><span><span class="ac a-litellm">LiteLLM</span></span><span><span class="ac a-llm">Ollama / vLLM</span></span><span><span class="ac a-langfuse">Langfuse</span></span>
+    </div>
+  </div>
+
+  <div class="fl-cols">
+    <!-- A -->
+    <section class="panel fcol cA" id="colA">
+      <div class="tag" style="background:var(--c-api)">1 · Request &amp; plan</div>
+      <h2>Validate, identify, plan</h2>
+      <div class="note">nothing is retrieved until the request is valid and traceable</div>
+      <div class="lane">
+        <div class="side-col">
+          <div class="out err" id="oA"><b>Reject request</b>400 for schema or length violations; no retrieval</div>
+        </div>
+        <div>
+          <div class="node" id="a1"><div class="t">Question from React</div><div class="d">chat message + optional metadata filters</div><div class="actors"><span class="ac a-react">React</span><span class="ac a-django">Django</span></div></div>
+          <div class="node" id="a2"><div class="t">Request schema &amp; length validation</div><div class="d">DRF serializer · max length · allowed filters</div><div class="actors"><span class="ac a-django">Django</span></div></div>
+          <div class="node store" id="a3"><div class="t">Create request ID &amp; trace ID</div><div class="d"><span class="mono">retrieval_runs</span> row created · Langfuse trace opened</div><div class="actors"><span class="ac a-django">Django</span><span class="ac a-pg">PostgreSQL</span><span class="ac a-langfuse">Langfuse</span></div></div>
+          <div class="node" id="a4"><div class="t">Query normalization &amp; classification</div><div class="d">whitespace, casing, language, query type</div><div class="actors"><span class="ac a-django">Django</span></div></div>
+          <div class="node store" id="a5"><div class="t">Select published pipeline &amp; index generation</div><div class="d">physical Qdrant collection and OpenSearch index from <span class="mono">index_generations</span></div><div class="actors"><span class="ac a-pg">PostgreSQL</span></div></div>
+          <div class="node" id="a6"><div class="t">Build retrieval plan</div><div class="d">top-k per engine, filters, fusion, rerank and context settings from <span class="mono">retrieval_definitions</span></div><div class="actors"><span class="ac a-django">Django</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- B -->
+    <section class="panel fcol cB" id="colB">
+      <div class="tag" style="background:var(--c-retrieval)">2 · Retrieve &amp; rank</div>
+      <h2>Hybrid retrieval on one generation</h2>
+      <div class="note">both engines see the same filters and the same generation</div>
+      <div class="lane">
+        <div class="side-col">
+          <div class="out neutral" id="oB"><b>Recorded per candidate</b><span class="mono">retrieval_results</span>: source, original rank and score, fusion rank, reranker score</div>
+        </div>
+        <div>
+          <div class="split2" id="bsplit">
+            <div class="node" id="b1a"><div class="t">Embed query → Qdrant dense search</div><div class="d">local embedding model · top-k · payload filter</div><div class="actors"><span class="ac a-embed">Embedder</span><span class="ac a-qdrant">Qdrant</span></div></div>
+            <div class="node" id="b1b"><div class="t">OpenSearch BM25 search</div><div class="d">top-k · same filter · exact keyword matches</div><div class="actors"><span class="ac a-os">OpenSearch</span></div></div>
+          </div>
+          <div class="node" id="b2"><div class="t">Normalize candidates</div><div class="d">one candidate shape keyed by chunk ID</div><div class="actors"><span class="ac a-django">Django</span></div></div>
+          <div class="node" id="b3"><div class="t">RRF fusion &amp; deduplication</div><div class="d">Σ 1 / (k + rank), k = 60 · dedupe by chunk → <span class="mono">fusion_rank</span></div><div class="actors"><span class="ac a-django">Django</span></div></div>
+          <div class="node" id="b4"><div class="t">Cross-encoder reranking</div><div class="d">local cross-encoder over fused candidates → <span class="mono">reranker_score</span></div><div class="actors"><span class="ac a-rerank">Reranker</span></div></div>
+          <div class="node store" id="b5"><div class="t">Optional MMR &amp; parent expansion</div><div class="d">reduce redundancy · fetch parent chunks when a child lacks context</div><div class="actors"><span class="ac a-django">Django</span><span class="ac a-pg">PostgreSQL</span></div></div>
+          <div class="node store" id="b6"><div class="t">Context budget &amp; source validation</div><div class="d">token budget · every source belongs to the published generation · canonical text from PostgreSQL</div><div class="actors"><span class="ac a-django">Django</span><span class="ac a-pg">PostgreSQL</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- C -->
+    <section class="panel fcol cC" id="colC">
+      <div class="tag" style="background:#5b21b6">3 · Decide &amp; generate</div>
+      <h2>Generate only with enough evidence</h2>
+      <div class="note">abstaining is a valid, recorded outcome</div>
+      <div class="lane">
+        <div class="side-col">
+          <div class="out neutral" id="oC"><b>Abstain or ask a clarifying question</b>no LLM call; the outcome is still persisted</div>
+        </div>
+        <div>
+          <div class="dec" id="dC1">Evidence sufficient?</div>
+          <div class="node" id="c2"><div class="t">Construct grounded prompt</div><div class="d">template from <span class="mono">generation_definitions</span> · numbered sources · citation and abstention rules</div><div class="actors"><span class="ac a-django">Django</span></div></div>
+          <div class="node" id="c3"><div class="t">LiteLLM gateway</div><div class="d">one local model interface · routing, retries, timeouts</div><div class="actors"><span class="ac a-litellm">LiteLLM</span><span class="ac a-langfuse">Langfuse</span></div></div>
+          <div class="node" id="c4"><div class="t">Local LLM</div><div class="d">Ollama or vLLM · model files available offline</div><div class="actors"><span class="ac a-llm">Ollama / vLLM</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- D -->
+    <section class="panel fcol cD" id="colD">
+      <div class="tag" style="background:var(--c-ingest)">4 · Validate &amp; respond</div>
+      <h2>Trust the answer only after checks</h2>
+      <div class="note">text from the LLM is not proof of grounding</div>
+      <div class="lane">
+        <div class="side-col">
+          <div class="out err" id="oD"><b>Reject, repair once or abstain</b>one repair attempt, then abstain — never return an unvalidated answer</div>
+        </div>
+        <div>
+          <div class="node" id="d1"><div class="t">Validate answer schema</div><div class="d">structured answer + citation markers parse cleanly</div><div class="actors"><span class="ac a-django">Django</span></div></div>
+          <div class="node" id="d2"><div class="t">Validate citation references</div><div class="d">every citation points to a chunk that was in the context</div><div class="actors"><span class="ac a-django">Django</span></div></div>
+          <div class="node" id="d3"><div class="t">Grounding &amp; safety checks</div><div class="d">claims supported by the cited text · safety rules</div><div class="actors"><span class="ac a-django">Django</span></div></div>
+          <div class="dec" id="dD4">Valid answer?</div>
+          <div class="node store" id="d5"><div class="t">Persist answer &amp; evidence</div><div class="d"><span class="mono">answer_records</span>: answer, <span class="mono">citation_data</span>, status, latency, token usage · trace closed</div><div class="actors"><span class="ac a-pg">PostgreSQL</span><span class="ac a-langfuse">Langfuse</span></div></div>
+          <div class="node ok" id="d6"><div class="t">Return answer, citations &amp; status</div><div class="d">streamed to React; feedback buttons write <span class="mono">user_feedback</span></div></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel rail">
+    <h3>What each stage leaves behind</h3>
+    <div class="track">
+      <div class="seg"><span class="st b">retrieval_runs</span><span class="cap" style="margin:0">request_id · trace_id · normalized_query · pipeline_version · index_generation</span></div>
+      <div class="seg"><span class="st b">retrieval_results</span><span class="cap" style="margin:0">dense and BM25 candidates · fusion_rank · reranker_score</span></div>
+      <div class="seg"><span class="st">Langfuse spans</span><span class="cap" style="margin:0">retrieval · rerank · generation · token counts · latency</span></div>
+      <div class="seg"><span class="st a">answer_records</span><span class="cap" style="margin:0">answer · citation_data · status · later user_feedback / failure_cases</span></div>
+    </div>
+  </section>
+
+  <div class="notes">
+    <section class="panel n"><h3>Grounding is checked, not assumed</h3><ul><li>abstain when evidence is thin</li><li>schema, citation and grounding checks before any answer is returned</li><li>one repair attempt, then abstain</li></ul></section>
+    <section class="panel n"><h3>One generation per query</h3><ul><li>physical index names come from PostgreSQL</li><li>Qdrant and OpenSearch are never mixed across generations</li><li>the generation ID is stored on the run for reproducibility</li></ul></section>
+    <section class="panel n"><h3>Measurable baseline first</h3><ul><li>dense + BM25 → RRF → cross-encoder is the starting point</li><li>query rewriting, multi-query, HyDE, decomposition, corrective retrieval and agentic routing only when evaluation shows a gain</li></ul></section>
+    <section class="panel n"><h3>Trace privacy</h3><ul><li>spans carry IDs, timings and token counts by default</li><li>prompts and document text only where policy allows</li><li><span class="mono">trace_id</span> joins Langfuse to <span class="mono">retrieval_runs</span></li></ul></section>
+  </div>
+</div>
+
+<script src="viewer.js"></script>
+<script src="diagram.js"></script>
+<script>
+function placeSide(id, anchorId) {
+  const side = document.getElementById(id), a = document.getElementById(anchorId);
+  const parent = side.parentElement.getBoundingClientRect(), r = a.getBoundingClientRect();
+  side.style.top = (r.top - parent.top + r.height / 2 - side.getBoundingClientRect().height / 2) + "px";
+}
+placeSide("oA", "a2"); placeSide("oB", "b4"); placeSide("oC", "c3"); placeSide("oD", "dD4");
+whenLaidOut(() => {
+  const main = '#8aa2c8', yes = '#1d4ed8', no = '#e11d48', next = '#334155', grey = '#64748b';
+  const v = (a, b, extra = {}) => ({ from: [a, 'bottom'], to: [b, 'top'], color: main, width: 2, ...extra });
+  drawEdges([
+    v('a1', 'a2'), v('a2', 'a3', { label: 'valid' }), v('a3', 'a4'), v('a4', 'a5'), v('a5', 'a6'),
+    { from: ['a2', 'left'], to: ['oA', 'right'], color: no, width: 2 },
+    { from: ['a6', 'right'], to: ['b1a', 'left', 0.3], x: ['colA', 'right', 50], color: next, width: 2.4 },
+
+    { from: ['b1a', 'bottom'], to: ['b2', 'top', 0.25], color: main, width: 2 },
+    { from: ['b1b', 'bottom'], to: ['b2', 'top', 0.75], color: main, width: 2 },
+    v('b2', 'b3'), v('b3', 'b4'), v('b4', 'b5'), v('b5', 'b6'),
+    { from: ['b6', 'right'], to: ['dC1', 'top'], color: next, width: 2.4,
+      points: [[['colB', 'right', 50], ['b6', 'cy']], [['colB', 'right', 50], ['dC1', 'top', -16]], [['dC1', 'cx'], ['dC1', 'top', -16]]] },
+
+    v('dC1', 'c2', { color: yes, label: 'yes' }), v('c2', 'c3'), v('c3', 'c4'),
+    { from: ['dC1', 'left'], to: ['oC', 'top'], color: no, width: 2, label: 'no', seg: 0 },
+    { from: ['c4', 'right'], to: ['d1', 'left'], x: ['colC', 'right', 50], color: next, width: 2.4 },
+    // abstention still gets persisted
+    { from: ['oC', 'bottom'], to: ['d5', 'left', 0.5], color: grey, width: 2, dash: true, label: 'persist abstention',
+      points: [[['oC', 'cx'], ['colC', 'bottom', -22]], [['colC', 'right', 72], ['colC', 'bottom', -22]], [['colC', 'right', 72], ['d5', 'cy']]], seg: 1 },
+
+    v('d1', 'd2'), v('d2', 'd3'), v('d3', 'dD4'), v('dD4', 'd5', { color: yes, label: 'yes' }), v('d5', 'd6'),
+    { from: ['dD4', 'left'], to: ['oD', 'right'], color: no, width: 2, label: 'no' },
+    { from: ['oD', 'bottom'], to: ['d5', 'left', 0.28], color: no, width: 2 },
+  ]);
+});
+</script>
+</body>
+</html>

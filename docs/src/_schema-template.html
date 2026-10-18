@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RAG Database Schema</title>
+<link rel="stylesheet" href="diagram.css">
+<style>
+  #canvas { display: inline-block; min-width: 2400px; }
+  .title-row { margin-bottom: 18px; }
+  .meta { display: flex; gap: 22px; flex-wrap: wrap; align-items: stretch; margin-bottom: 18px; }
+  .box { background: #fff; border: 1.5px solid var(--line); border-radius: 14px; padding: 14px 18px; font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+  .box h4 { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .nota { display: grid; grid-template-columns: 130px 1fr; gap: 6px 14px; align-items: center; }
+  .badges { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: center; }
+  .badges b { font-size: 12px; font-family: "Liberation Sans", sans-serif; }
+  .box ul { margin-left: 17px; }
+  .box .mono { font-size: 12.5px; color: var(--ink); }
+  .sw { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 6px; }
+  #schema svg { display: block; }
+  .newtag { display: inline-block; font-size: 10.5px; font-weight: 800; color: #92400e; background: #fde68a; border-radius: 4px; padding: 0 5px; }
+  .addrow { display: inline-block; font-size: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 4px; padding: 0 6px; }
+  .meta .box { flex: 1 1 0; min-width: 0; }
+</style>
+</head>
+<body>
+<div id="canvas">
+  <div class="title-row">
+    <div>
+      <h1>PostgreSQL Database Schema — Offline Hybrid RAG Platform (v2)</h1>
+      <div class="sub">Section 4 of the v2 brief as PostgreSQL tables · {{STATS}} · MinIO holds file bytes, Qdrant and OpenSearch hold derived copies keyed by <span class="mono">chunks.id</span></div>
+    </div>
+  </div>
+
+  <div class="meta">
+    <div class="box">
+      <h4>Relationship notation</h4>
+      <div class="nota">
+        <svg width="120" height="22" viewBox="0 0 120 22"><line x1="4" y1="11" x2="116" y2="11" stroke="#475569" stroke-width="1.8"/><line x1="10" y1="4" x2="10" y2="18" stroke="#475569" stroke-width="1.8"/><line x1="16" y1="4" x2="16" y2="18" stroke="#475569" stroke-width="1.8"/><circle cx="98" cy="11" r="5" fill="#fff" stroke="#475569" stroke-width="1.8"/><path d="M104 11 L116 4 M104 11 L116 18 M104 11 L116 11" stroke="#475569" stroke-width="1.8"/></svg>
+        <span>exactly one parent → zero or many children</span>
+      </div>
+      <div class="badges" style="margin-top:10px">
+        <b style="color:#0f172a">PK</b><span>primary key (UUID; <span class="mono">bigint</span> for append-only logs)</span>
+        <b style="color:#1d4ed8">FK</b><span>foreign key, line drawn to the parent's <span class="mono">id</span></span>
+        <b style="color:#475569">UQ</b><span>part of a unique constraint</span>
+        <b style="color:#94a3b8">IX</b><span>part of a recommended index</span>
+        <span class="mono" style="color:#64748b">type?</span><span>nullable · <span class="mono">enum</span> = Django TextChoices</span>
+      </div>
+    </div>
+    <div class="box">
+      <h4>Beyond the brief (recommended)</h4>
+      <ul>
+        <li><span class="addrow">column <b style="color:#b45309">+</b></span> added column: <span class="mono">pipeline_versions.retrieval_definition_id</span>, <span class="mono">.generation_definition_id</span> (the brief leaves both definitions unreferenced); <span class="mono">chunks.pipeline_version_id</span> (chunks of one version re-processed by another pipeline must not collide); <span class="mono">processing_jobs.created_at</span> and <span class="mono">retrieval_runs.created_at</span> (the recommended indexes need them)</li>
+        <li><span class="newtag">ADDED</span> <span class="mono">outbox_events</span> — durable Celery dispatch and index sync events, written in the same transaction as the job or chunk rows</li>
+        <li><span class="newtag">OPTIONAL</span> <span class="mono">storage_objects</span> — shared MinIO object registry, as the brief describes</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h4>Unique constraints &amp; indexes</h4>
+      <ul>
+        <li><span class="mono">document_versions (document_id, version_number)</span> UQ · <span class="mono">content_sha256</span> IX</li>
+        <li><span class="mono">processing_jobs (status, created_at)</span> · <span class="mono">document_elements (document_version_id, element_order)</span></li>
+        <li><span class="mono">chunks (document_version_id, pipeline_version_id, chunk_index)</span> UQ · <span class="mono">parent_chunk_id</span></li>
+        <li><span class="mono">embedding_records (chunk_id, model_id, model_version)</span></li>
+        <li><span class="mono">index_generations (pipeline_version_id, generation_number)</span> UQ</li>
+        <li><span class="mono">index_memberships (index_generation_id, chunk_id)</span> UQ · <span class="mono">(index_generation_id, document_version_id)</span></li>
+        <li><span class="mono">retrieval_results (retrieval_run_id, fusion_rank)</span> · <span class="mono">evaluation_results (run, case, metric_name)</span></li>
+      </ul>
+    </div>
+    <div class="box">
+      <h4>Not drawn, to keep lines readable</h4>
+      <ul>
+        <li>self references: <span class="mono">document_versions.parent_version_id</span>, <span class="mono">chunks.parent_chunk_id</span></li>
+        <li><span class="mono">documents.current_version_id → document_versions</span> (nullable, deferrable)</li>
+        <li>polymorphic references: <span class="mono">outbox_events.aggregate_id</span>, <span class="mono">audit_events.entity_id</span></li>
+        <li>MinIO references are <span class="mono">(storage_bucket, storage_object_key)</span> pairs, matched to <span class="mono">storage_objects</span> when that registry is used</li>
+      </ul>
+    </div>
+  </div>
+
+  <div id="schema">{{SVG}}</div>
+</div>
+<script src="viewer.js"></script>
+<script>
+// Domain regions + orthogonal FK routing. Graphviz (neato, pinned) only places the tables;
+// node-local SVG coordinates equal the LAYOUT coordinates in build_schema.py.
+const DOMAINS = {{DOMAINS}};
+const TABLE_DOMAIN = {{TABLE_DOMAIN}};
+const EDGES = {{EDGES}};
+const COLUMNS = {{COLUMNS}};
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs, parent) => {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+
+function collect(graph) {
+  const nodes = {};
+  for (const node of graph.querySelectorAll("g.node")) {
+    const name = node.querySelector("title").textContent;
+    const b = node.getBBox();
+    const rows = {};
+    for (const t of node.querySelectorAll("text")) {
+      if (!/Helvetica/i.test(t.getAttribute("font-family") || "")) continue;
+      const tb = t.getBBox();
+      const key = t.textContent.trim();
+      if (!(key in rows)) rows[key] = tb.y + tb.height / 2;
+    }
+    nodes[name] = { name, l: b.x, r: b.x + b.width, t: b.y, b: b.y + b.height, col: COLUMNS[name], rows };
+  }
+  return nodes;
+}
+
+const labels = [];
+function drawRegions(graph, nodes, anchor) {
+  const boxes = {};
+  for (const n of Object.values(nodes)) {
+    const d = TABLE_DOMAIN[n.name];
+    const r = boxes[d] || (boxes[d] = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity });
+    r.x1 = Math.min(r.x1, n.l); r.y1 = Math.min(r.y1, n.t); r.x2 = Math.max(r.x2, n.r); r.y2 = Math.max(r.y2, n.b);
+  }
+  for (const [d, r] of Object.entries(boxes)) {
+    const [label, color, fill, border] = DOMAINS[d];
+    const pad = 26, head = 38;
+    const g = el("g", {});
+    el("rect", { x: r.x1 - pad, y: r.y1 - pad - head, width: r.x2 - r.x1 + 2 * pad, height: r.y2 - r.y1 + 2 * pad + head,
+                 rx: 18, fill, stroke: border, "stroke-width": 2 }, g);
+    const t = el("text", { x: r.x1 - pad + 18, y: r.y1 - pad - head + 28, fill: color, "font-size": 20, "font-weight": 800,
+                           "font-family": "Noto Sans, Liberation Sans, sans-serif", class: "region-label",
+                           stroke: fill, "stroke-width": 9, "stroke-linejoin": "round", "paint-order": "stroke" });
+    t.textContent = label;
+    graph.insertBefore(g, anchor);
+    labels.push(t);
+  }
+}
+
+function route(graph, nodes) {
+  const ncol = Math.max(...Object.values(COLUMNS)) + 1;
+  const colNodes = [...Array(ncol)].map(() => []);
+  for (const n of Object.values(nodes)) colNodes[n.col].push(n);
+  const colLeft = colNodes.map((ns) => Math.min(...ns.map((n) => n.l)));
+  const colRight = colNodes.map((ns) => Math.max(...ns.map((n) => n.r)));
+  // gutter g sits right of column g (g = -1 would be left of column 0)
+  const gutter = (g) => {
+    const a = g < 0 ? colLeft[0] - 140 : colRight[g] + 34;
+    const b = g >= ncol - 1 ? colRight[ncol - 1] + 140 : colLeft[g + 1] - 34;
+    return { a, b };
+  };
+  const free = (col, y, m = 16) => colNodes[col].every((n) => y < n.t - m || y > n.b + m);
+  // widest empty horizontal band across the whole diagram (between the two rows of domains)
+  const spans = Object.values(nodes).map((n) => [n.t, n.b]).sort((a, b) => a[0] - b[0]);
+  let band = null, reach = spans[0][1];
+  for (const [t, b] of spans.slice(1)) {
+    if (t > reach && (!band || t - reach > band.b - band.a)) band = { a: reach, b: t };
+    reach = Math.max(reach, b);
+  }
+  // keep clear of the region frames and labels that sit inside the band
+  const bandMid = band ? band.a + (band.b - band.a) * 0.38 : null;
+
+  // 1) decide geometry per edge
+  const plans = EDGES.map((e) => {
+    const P = nodes[e.parent], C = nodes[e.child];
+    const y0 = P.rows["id"], y1 = C.rows[e.col];
+    let s0, s1, g0, g1;
+    if (P.col === C.col) { s0 = 1; s1 = 1; g0 = g1 = P.col; }
+    else if (C.col > P.col) { s0 = 1; s1 = -1; g0 = P.col; g1 = C.col - 1; }
+    else { s0 = -1; s1 = 1; g0 = P.col - 1; g1 = C.col; }
+    const x0 = s0 > 0 ? P.r : P.l, x1 = s1 > 0 ? C.r : C.l;
+    let yc = null;
+    if (g0 !== g1) {
+      const lo = Math.min(g0, g1) + 1, hi = Math.max(g0, g1);
+      const between = []; for (let c = lo; c <= hi; c++) between.push(c);
+      const cands = new Set([y0, y1]);
+      if (bandMid !== null) cands.add(bandMid);
+      for (const c of between) for (const n of colNodes[c]) { cands.add(n.t - 22); cands.add(n.b + 22); }
+      let best = null, bestCost = Infinity;
+      for (const y of cands) {
+        if (!between.every((c) => free(c, y))) continue;
+        const cost = Math.abs(y - y0) + Math.abs(y - y1) + (bandMid === null ? 0 : 0.002 * Math.abs(y - bandMid));
+        if (cost < bestCost) { bestCost = cost; best = y; }
+      }
+      yc = best;
+      var betweenCols = between;
+    }
+    return { e, P, C, x0, y0, x1, y1, s0, s1, g0, g1, yc, between: betweenCols || [] };
+  });
+
+  // 2) spread horizontal channel segments that would overlap
+  const used = [];
+  for (const p of plans) {
+    if (p.yc === null) continue;
+    const xa = Math.min(p.x0, p.x1), xb = Math.max(p.x0, p.x1);
+    const clash = (y) => used.some((u) => Math.abs(u.y - y) < 7 && u.xb > xa && u.xa < xb);
+    const clear = (y) => p.between.every((c) => free(c, y, 12));
+    for (let k = 0; k <= 24; k++) {
+      const y = p.yc + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 8;
+      if (!clash(y) && clear(y)) { p.yc = y; break; }
+    }
+    used.push({ y: p.yc, xa, xb });
+  }
+
+  // 3) assign lanes inside each gutter
+  const lanes = {};
+  const want = (g, p, end) => (lanes[g] || (lanes[g] = [])).push({ p, end });
+  for (const p of plans) { want(p.g0, p, 0); if (p.g1 !== p.g0) want(p.g1, p, 1); }
+  for (const [g, list] of Object.entries(lanes)) {
+    const { a, b } = gutter(+g);
+    const n = list.length, step = Math.min(8, (b - a) / Math.max(n, 1));
+    // order lanes by the vertical span midpoint to reduce crossings
+    list.sort((u, v) => ((u.p.y0 + u.p.y1) / 2) - ((v.p.y0 + v.p.y1) / 2));
+    list.forEach((item, i) => {
+      const x = (a + b) / 2 + (i - (n - 1) / 2) * step;
+      if (item.end === 0) item.p.gx0 = x; else item.p.gx1 = x;
+    });
+  }
+
+  // 4) draw
+  const layer = el("g", { class: "fk-lines" });
+  graph.appendChild(layer);
+  const marks = el("g", { class: "fk-marks" });
+  graph.appendChild(marks);
+  for (const p of plans) {
+    if (p.gx1 === undefined) p.gx1 = p.gx0;
+    let pts;
+    if (p.g0 === p.g1) pts = [[p.x0, p.y0], [p.gx0, p.y0], [p.gx0, p.y1], [p.x1, p.y1]];
+    else pts = [[p.x0, p.y0], [p.gx0, p.y0], [p.gx0, p.yc], [p.gx1, p.yc], [p.gx1, p.y1], [p.x1, p.y1]];
+    const color = p.e.color;
+    el("path", { d: rounded(pts, 9), fill: "none", stroke: color, "stroke-width": 1.7, "stroke-opacity": 0.78,
+                 "stroke-dasharray": p.e.kind === "0" ? "6 4" : "none", "stroke-linejoin": "round" }, layer);
+    endMarks(marks, p.x0, p.y0, p.s0, p.e.kind === "0" ? "zero-one" : "one", color);
+    endMarks(marks, p.x1, p.y1, p.s1, p.e.kind === "1:1" ? "zero-one" : "many", color);
+  }
+}
+
+function rounded(pts, rad) {
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], [x2, y2] = pts[i + 1];
+    const d1 = Math.hypot(x1 - x0, y1 - y0), d2 = Math.hypot(x2 - x1, y2 - y1);
+    if (d1 < 0.5 || d2 < 0.5) continue;
+    const r = Math.min(rad, d1 / 2, d2 / 2);
+    d += ` L${x1 + (x0 - x1) / d1 * r},${y1 + (y0 - y1) / d1 * r} Q${x1},${y1} ${x1 + (x2 - x1) / d2 * r},${y1 + (y2 - y1) / d2 * r}`;
+  }
+  const last = pts[pts.length - 1];
+  return d + ` L${last[0]},${last[1]}`;
+}
+
+// crow's-foot symbols at a table edge; dir = +1 when the line leaves to the right
+function endMarks(g, x, y, dir, kind, color) {
+  const line = (xa, ya, xb, yb) => el("line", { x1: xa, y1: ya, x2: xb, y2: yb, stroke: color, "stroke-width": 1.8 }, g);
+  const ring = (cx) => el("circle", { cx, cy: y, r: 4.2, fill: "#fff", stroke: color, "stroke-width": 1.8 }, g);
+  if (kind === "one") { line(x + dir * 9, y - 6, x + dir * 9, y + 6); line(x + dir * 15, y - 6, x + dir * 15, y + 6); }
+  if (kind === "zero-one") { line(x + dir * 9, y - 6, x + dir * 9, y + 6); ring(x + dir * 20); }
+  if (kind === "many") {
+    line(x + dir * 13, y, x + 0.5 * dir, y - 6.5); line(x + dir * 13, y, x + 0.5 * dir, y + 6.5); line(x + dir * 13, y, x, y);
+    ring(x + dir * 20);
+  }
+}
+
+(document.fonts ? document.fonts.ready : Promise.resolve()).then(() => {
+  const graph = document.querySelector("#schema svg g.graph");
+  const nodes = collect(graph);
+  drawRegions(graph, nodes, graph.querySelector(":scope > g.node"));
+  route(graph, nodes);
+  // tables above the lines so a line never hides a column name
+  for (const n of [...graph.querySelectorAll(":scope > g.node")]) graph.appendChild(n);
+  graph.appendChild(graph.querySelector(".fk-marks"));
+  for (const t of labels) graph.appendChild(t);
+  requestAnimationFrame(() => { window.__ready = true; if (window.initViewer) window.initViewer(); });
+});
+</script>
+</body>
+</html>
