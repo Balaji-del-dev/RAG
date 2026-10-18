@@ -31,12 +31,28 @@ A configurable, fully local RAG platform. Files are uploaded through React and v
 
 ---
 
-## Learning path — concepts behind this platform
+## Learning path — concepts for interviews
 
-**[concepts/index.html](concepts/index.html)** — 27 lessons in one order (about 11 hours). Each lesson is its own HTML page with Previous / Next navigation and a "mark as learned" tracker.
+**[concepts/index.html](concepts/index.html)** — 27 lessons in one order (about 11 hours), written in simple English for interview preparation. Each lesson is its own HTML page with Previous / Next navigation and a "mark as learned" tracker.
+
+Every lesson has the same structure: **What is it?** (the formal interview answer plus "in simple words") → **Why do we need it?** → **How does it work?** (numbered steps with examples and a diagram) → **Example: step by step** → **Important terms** → **Types and comparison** → **Advantages and limitations** → **Where is it used?** (real examples and our platform) → **How to explain it in an interview** (a 1-minute spoken answer, plus "don't say / say instead") → **Interview questions and answers** (model answers shown, with a practice mode that hides them) → **Quick revision**.
 
 | Stage | Lessons |
 |---|---|
+| 1 · Foundations | 01 How LLMs work · 02 Tokens & tokenization · 03 Embeddings & similarity · 04 Transformer & attention · 05 Decoding: temperature, top-p · 06 Running models locally · 07 Prompt engineering |
+| 2 · Ingestion pipeline | 08 RAG fundamentals · 09 Document parsing & OCR · 10 Cleaning & metadata · 11 Chunking strategies · 12 Embedding models · 13 Vector databases & HNSW · 14 Keyword search & BM25 |
+| 3 · Retrieval & answers | 15 Query transformation · 16 Hybrid search & RRF · 17 Reranking · 18 Grounded answers & hallucination · 19 Agents, tools & GraphRAG |
+| 4 · Quality | 20 Evaluating RAG · 21 Observability & tracing |
+| 5 · Safety & production | 22 Guardrails · 23 LLM security & prompt injection · 24 Privacy & data governance · 25 Production: latency, cost, scale · 26 Fine-tuning, LoRA & RLHF · 27 System design: the full RAG system |
+
+Two practice pages sit next to the lessons:
+
+- **[concepts/interview-questions.html](concepts/interview-questions.html)** — all 277 questions with model answers and key words; filter by stage and level, search, mark questions as known, and practise with flashcards.
+- **[concepts/revision.html](concepts/revision.html)** — every lesson's interview definition and five key points on one page, for the day before an interview.
+
+The interview content lives in `concepts/assets/qa/NN.js` (one file per lesson); `concepts/assets/path.js` holds the lesson order and renders navigation, questions and revision cards.
+
+---|---|
 | 1 · Foundations | 01 how LLMs work · 02 tokens · 03 embeddings · 04 transformer architecture · 05 generation & decoding · 06 running models locally · 07 prompt engineering |
 | 2 · Ingestion pipeline | 08 RAG fundamentals · 09 parsing & OCR · 10 cleaning & metadata · 11 chunking · 12 embedding models · 13 vector indexing · 14 lexical search & BM25 |
 | 3 · Retrieval & answers | 15 query understanding · 16 hybrid search & RRF · 17 reranking · 18 grounded generation · 19 agents, tools & GraphRAG |

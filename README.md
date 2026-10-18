@@ -11,7 +11,7 @@ Architecture documentation for a fully local, configurable RAG platform built fr
 
 The full write-up is in **[docs/README.md](docs/README.md)**.
 
-**Learning path:** [docs/concepts/index.html](docs/concepts/index.html) — 27 ordered lessons, from transformers and tokens to chunking, retrieval, evaluation, guardrails and security.
+**Learning path:** [docs/concepts/index.html](docs/concepts/index.html) — 27 ordered, interview-focused lessons, from how LLMs work to designing a full RAG system, with 277 interview questions and model answers ([Q&A bank](docs/concepts/interview-questions.html) · [revision page](docs/concepts/revision.html)).
 
 | Diagram | |
 |---|---|

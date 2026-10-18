@@ -9,93 +9,142 @@
 <body data-lesson="24">
 <main><article class="content">
 
-<h2><span class="ix">1</span>What you will learn</h2>
-<ul>
-  <li>Where personal and confidential data flows in a RAG system — including places people forget.</li>
-  <li>Core principles: minimization, purpose, access, retention, deletion and audit.</li>
-  <li>How to delete a document <i>completely</i>.</li>
-  <li>The regulations to be aware of (GDPR, India's DPDP Act, the EU AI Act), at a high level.</li>
-</ul>
+<h2><span class="ix">1</span>What is privacy and data governance?</h2>
+<div class="oneline" data-def><small>Interview answer — say this first</small></div>
+<div class="simple"><b>In simple words</b>
+<p>Data governance is the set of rules for company and personal data: <b>who</b> may see it, <b>why</b> it is used, <b>how long</b> it is kept, and how it is <b>completely deleted</b>. In a RAG system the same document is copied into many places, and every copy must follow the same rules.</p></div>
 
-<h2><span class="ix">2</span>Why it matters</h2>
-<p>RAG copies data into many places: object storage, a database, two search indexes, caches, logs and traces. Every copy must follow the same rules. A "deleted" document that still answers questions from an old index, or sits in a trace, is a privacy incident. Running models <b>locally</b> is a big advantage here: data never leaves your infrastructure.</p>
+<h2><span class="ix">2</span>Why do we need it?</h2>
+<p>RAG copies data into object storage, a database, two search indexes, caches, logs and traces. A "deleted" document that still answers questions from an old index, or sits inside a trace, is a <b>privacy incident</b>. Laws like GDPR and India's DPDP Act also give people the right to have their data erased.</p>
+<div class="pc">
+  <div class="con"><h4>Without governance</h4><ul>
+    <li>Deleted files still appear in answers</li>
+    <li>Personal data sits in logs forever</li>
+    <li>Anyone can see salary or medical documents</li>
+    <li>No record of who did what</li>
+  </ul></div>
+  <div class="pro"><h4>With governance</h4><ul>
+    <li>Deletion removes every copy</li>
+    <li>Personal data is minimized and masked</li>
+    <li>Access is enforced at search time</li>
+    <li>Every action is audited</li>
+  </ul></div>
+</div>
+<div class="remember"><b>Remember — local models are a big privacy advantage</b>
+<p>When the models run on your own servers, documents and questions never leave your infrastructure.</p></div>
 
-<h2><span class="ix">3</span>Core ideas</h2>
-<h3>Where data lives</h3>
+<h2><span class="ix">3</span>How does it work?</h2>
+<h3>The six principles</h3>
+<div class="stepcards">
+  <div class="sc"><span class="num">1</span><div><h4>Minimize</h4><p>Ingest and log only what is needed. Redact personal data that is not needed for answers.</p></div></div>
+  <div class="sc"><span class="num">2</span><div><h4>Purpose</h4><p>Use data only for the purpose it was collected for. Don't train models on it without a legal basis.</p></div></div>
+  <div class="sc"><span class="num">3</span><div><h4>Access</h4><p>Role- or attribute-based access, enforced as filters at retrieval time (lesson 23).</p></div></div>
+  <div class="sc"><span class="num">4</span><div><h4>Retention</h4><p>Defined lifetimes for documents, chat history, logs and traces, with automatic cleanup.</p></div></div>
+  <div class="sc"><span class="num">5</span><div><h4>Deletion</h4><p>Remove every copy, including derived ones like vectors and caches, within a defined time.</p></div></div>
+  <div class="sc"><span class="num">6</span><div><h4>Audit</h4><p>Record who uploaded, viewed, changed, approved or deleted what, in a tamper-evident log.</p></div></div>
+</div>
+<h3>Where a document's data lives</h3>
 <table class="t">
   <tr><th>Place</th><th>What it holds</th></tr>
   <tr><td>Object storage (MinIO)</td><td>originals, OCR output, page images, exports</td></tr>
   <tr><td>PostgreSQL</td><td>chunk text, metadata, questions, answers, feedback</td></tr>
-  <tr><td>Qdrant</td><td>vectors + payload. <b>Vectors can be partly inverted back to text</b>, so treat them as sensitive.</td></tr>
+  <tr><td>Qdrant</td><td>vectors + payload. <b>Text can be partly reconstructed from vectors</b>, so treat them as sensitive.</td></tr>
   <tr><td>OpenSearch</td><td>chunk text, highlights</td></tr>
   <tr><td>Caches</td><td>embedding, retrieval and answer caches</td></tr>
-  <tr><td>Logs and traces</td><td>prompts, questions, retrieved text — if you allow it</td></tr>
+  <tr><td>Logs and traces</td><td>prompts, questions, retrieved text — if allowed</td></tr>
   <tr><td>Backups and snapshots</td><td>copies of all of the above</td></tr>
 </table>
 
-<h3>Principles</h3>
-<div class="cards">
-  <div class="card"><h4>Minimize</h4><p>Ingest and log only what is needed. Redact PII that isn't needed for answers.</p></div>
-  <div class="card"><h4>Purpose</h4><p>Use data only for the purpose it was collected for. Don't train on it without a basis.</p></div>
-  <div class="card"><h4>Access</h4><p>Role- or attribute-based access, enforced at retrieval (lesson 23).</p></div>
-  <div class="card"><h4>Retention</h4><p>Defined lifetimes for documents, chat history, logs and traces, with automatic cleanup.</p></div>
-  <div class="card"><h4>Deletion</h4><p>Remove every copy, including derived ones, within a defined time.</p></div>
-  <div class="card"><h4>Audit</h4><p>Who uploaded, viewed, changed, approved or deleted — kept tamper-evident.</p></div>
+<h2><span class="ix">4</span>Example: step by step</h2>
+<div class="example"><b>Deleting a document completely</b>
+<ol class="steps">
+  <li>Mark the document <b>DELETED</b> in PostgreSQL. Search stops returning it immediately, because of a status filter.</li>
+  <li>Send outbox delete events: remove its points from Qdrant and its documents from OpenSearch in <b>every</b> index generation still kept, including old ones kept for rollback.</li>
+  <li>Clear caches that may contain its text or answers based on it.</li>
+  <li>After the lifecycle checks pass, delete its files and file versions from MinIO.</li>
+  <li>Purge or redact its text from logs and traces according to policy; let backups expire.</li>
+  <li>Record the deletion in <code>audit_events</code>.</li>
+</ol></div>
+<h3>Handling personal data (PII)</h3>
+<ul>
+  <li>Detect PII during ingestion (e.g. Presidio, plus patterns for Aadhaar, PAN or other ID formats) and tag or redact it according to policy.</li>
+  <li>Mask PII in logs and traces by default; give raw access only to a small, audited group.</li>
+  <li>Pseudonymize user IDs in analytics.</li>
+</ul>
+
+<h2><span class="ix">5</span>Important terms</h2>
+<div class="gloss">
+  <div><b>PII</b><p>Personally identifiable information: names, phone numbers, emails, ID numbers, addresses.</p></div>
+  <div><b>Data minimization</b><p>Collect, keep and log only the data that is really needed.</p></div>
+  <div><b>Retention period</b><p>How long each type of data is kept before automatic deletion.</p></div>
+  <div><b>Right to erasure</b><p>A person's legal right to have their personal data deleted.</p></div>
+  <div><b>Pseudonymization</b><p>Replacing identities with codes, so data is not directly linked to a person.</p></div>
+  <div><b>RBAC / ABAC</b><p>Role-based / attribute-based access control: who may see what.</p></div>
+  <div><b>Audit trail</b><p>A tamper-evident record of who did what and when.</p></div>
+  <div><b>Embedding inversion</b><p>Reconstructing text from its vector. The reason vectors are sensitive.</p></div>
 </div>
 
-<h2><span class="ix">4</span>How it works: complete deletion</h2>
-<ol class="steps">
-  <li>Mark the document <b>DELETED</b> in PostgreSQL. Retrieval stops returning it immediately (status filter).</li>
-  <li>Emit outbox delete events: remove its points from Qdrant and documents from OpenSearch in <b>every</b> retained index generation.</li>
-  <li>Invalidate caches that may contain its text or answers based on it.</li>
-  <li>After lifecycle checks (no published generation references it, retention passed), delete MinIO objects and their versions.</li>
-  <li>Purge or redact its text from logs and traces according to policy; let backups age out.</li>
-  <li>Record the deletion in <code>audit_events</code>.</li>
-</ol>
+<h2><span class="ix">6</span>Types and comparison</h2>
+<h3>Regulations to know (high level, not legal advice)</h3>
+<table class="t">
+  <tr><th>Law</th><th>Where</th><th>Key points</th></tr>
+  <tr><td><b>GDPR</b></td><td>EU</td><td>lawful basis, data minimization, rights of access and erasure, data protection by design</td></tr>
+  <tr><td><b>DPDP Act 2023</b></td><td>India</td><td>consent and notice, purpose limitation, rights of data principals (including erasure), security safeguards, breach reporting</td></tr>
+  <tr><td><b>EU AI Act</b></td><td>EU</td><td>risk-based obligations and transparency duties for AI systems, phased in from 2025</td></tr>
+  <tr><td>Sector rules</td><td>varies</td><td>health, finance and government may have extra rules</td></tr>
+</table>
+<table class="t">
+  <tr><th></th><th>Anonymization</th><th>Pseudonymization</th></tr>
+  <tr><td><b>Can the person be identified again?</b></td><td>no</td><td>yes, with the separate key</td></tr>
+  <tr><td><b>Still personal data under GDPR?</b></td><td>no</td><td>yes</td></tr>
+</table>
 
-<h3>PII handling</h3>
-<ul>
-  <li>Detect PII during ingestion (e.g. Presidio, plus regex for national ID formats) and tag or redact it according to policy.</li>
-  <li>Mask PII in logs and traces by default; give raw access only to a small, audited group.</li>
-  <li>Pseudonymize user identifiers in analytics.</li>
-</ul>
+<h2><span class="ix">7</span>Advantages and limitations</h2>
+<div class="pc">
+  <div class="pro"><h4>Good governance gives you</h4><ul>
+    <li>Legal compliance and fewer incidents</li>
+    <li>User and customer trust</li>
+    <li>Fast, complete deletion on request</li>
+    <li>Clear lineage of every chunk and answer</li>
+  </ul></div>
+  <div class="con"><h4>Hard parts</h4><ul>
+    <li>Many copies of data to track</li>
+    <li>Old index generations and backups</li>
+    <li>PII detection is never perfect</li>
+    <li>Logging less makes debugging harder</li>
+  </ul></div>
+</div>
+<div class="remember"><b>Remember — the places people forget</b>
+<p>Old index generations kept for rollback, caches, traces, object-storage versions and backups. A deletion is complete only when <b>all</b> of them are handled.</p></div>
 
-<h2><span class="ix">5</span>In the real world: regulations to know (not legal advice)</h2>
-<ul>
-  <li><b>GDPR</b> (EU): lawful basis, data minimization, rights of access and erasure, data protection by design.</li>
-  <li><b>DPDP Act 2023</b> (India): consent and notice, purpose limitation, data principal rights (including erasure), security safeguards and breach reporting.</li>
-  <li><b>EU AI Act</b>: risk-based obligations and transparency duties, phased in from 2025 onward.</li>
-  <li>Sector rules may apply: health, finance, government.</li>
-</ul>
-<p>Involve your legal or compliance team early. Good engineering — clear lineage, complete deletion, access control, audit — makes compliance much easier.</p>
-
-<h2><span class="ix">6</span>Common mistakes</h2>
-<ul>
-  <li>Deleting from the database but not from the vector and search indexes.</li>
-  <li>Forgetting old index generations kept for rollback.</li>
-  <li>Full prompts with personal data in long-lived traces.</li>
-  <li>Treating embeddings as "anonymous numbers".</li>
-</ul>
-
-<h2><span class="ix">7</span>In our platform</h2>
-<div class="platform"><h4>Where this lives</h4><ul>
-  <li>Lifecycle: <code>documents.lifecycle_status</code> and <code>document_versions.status</code> (SUPERSEDED, DELETED); deletion invalidates both indexes before MinIO cleanup.</li>
-  <li><code>storage_objects</code> prevents deleting bytes still referenced elsewhere; <code>audit_events</code> records every action.</li>
+<h2><span class="ix">8</span>Where is it used?</h2>
+<div class="uses">
+  <div><b>HR systems</b>salaries, reviews, medical leave</div>
+  <div><b>Healthcare</b>patient records</div>
+  <div><b>Banking</b>KYC documents, transactions</div>
+  <div><b>Legal</b>client-confidential contracts</div>
+  <div><b>Customer support</b>tickets with names and phone numbers</div>
+  <div><b>Government</b>citizen data</div>
+</div>
+<div class="platform"><h4>In our platform</h4><ul>
+  <li>Lifecycle: <code>documents.lifecycle_status</code> and <code>document_versions.status</code> (SUPERSEDED, DELETED); deletion clears both indexes before MinIO cleanup.</li>
+  <li><code>storage_objects</code> prevents deleting bytes still used elsewhere; <code>audit_events</code> records every action.</li>
   <li>Trace policy: Langfuse spans carry IDs, timings and token counts by default; text only where policy allows.</li>
   <li>Fully local models: no document or question leaves the deployment.</li>
 </ul></div>
 
-<h2><span class="ix">8</span>Check yourself</h2>
-<details class="q"><summary>Why are embeddings considered sensitive?</summary><div>Research shows text can be partly reconstructed from embeddings, so they carry the sensitivity of the original text.</div></details>
-<details class="q"><summary>List the places a deleted document may still exist.</summary><div>Vector index(es), lexical index(es), old index generations, caches, logs and traces, object storage versions and backups.</div></details>
-
-<h2><span class="ix">9</span>Key terms · Go deeper</h2>
-<div class="terms"><span><b>PII</b></span><span><b>data minimization</b></span><span><b>retention</b></span><span><b>right to erasure</b></span><span><b>pseudonymization</b></span><span><b>RBAC / ABAC</b></span><span><b>audit trail</b></span><span><b>embedding inversion</b></span></div>
-<ul class="refs">
-  <li>Morris et al. — <a href="https://arxiv.org/abs/2310.06816">Text Embeddings Reveal (Almost) As Much As Text</a></li>
-  <li><a href="https://gdpr.eu/">GDPR overview</a> · <a href="https://www.meity.gov.in/data-protection-framework">India — Digital Personal Data Protection Act</a> · <a href="https://artificialintelligenceact.eu/">EU AI Act explorer</a></li>
-  <li><a href="https://microsoft.github.io/presidio/">Microsoft Presidio</a></li>
-</ul>
+<h2><span class="ix">9</span>How to explain it in an interview</h2>
+<div class="script"><b>Your 1-minute answer</b>
+<p><span class="part">Definition</span>Data governance is the set of policies and controls that decide who may access data, for what purpose, how long it is kept and how it is deleted, together with an audit trail.</p>
+<p><span class="part">In RAG</span>Data is copied into object storage, the database, the vector and keyword indexes, caches, logs and traces, and every copy must follow the same rules. Embeddings are treated as sensitive because text can be partly reconstructed from them.</p>
+<p><span class="part">How</span>I minimize what is ingested and logged, redact personal data, enforce access at retrieval time, set retention periods, and implement complete deletion: mark deleted, remove from every index generation, clear caches, delete files, handle logs and backups, and audit it.</p>
+<p><span class="part">Regulation</span>This supports GDPR, India's DPDP Act and the EU AI Act, and running models locally keeps data inside the organization.</p></div>
+<div class="trap">
+  <div class="no"><b>Don't say</b>"Embeddings are just numbers, so they're anonymous."</div>
+  <div class="yes"><b>Say instead</b>"Text can be partly reconstructed from embeddings, so we protect them like the original text."</div>
+  <div class="no"><b>Don't say</b>"We delete the document from the database."</div>
+  <div class="yes"><b>Say instead</b>"Deletion covers the database, both indexes in every generation, caches, files, logs and backups."</div>
+</div>
 
 </article></main>
 <script src="assets/path.js"></script>

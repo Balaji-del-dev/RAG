@@ -3,107 +3,174 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Generation & decoding</title>
+<title>Decoding: temperature, top-p</title>
 <link rel="stylesheet" href="assets/concepts.css">
 </head>
 <body data-lesson="05">
 <main><article class="content">
 
-<h2><span class="ix">1</span>What you will learn</h2>
-<ul>
-  <li>How the next token is chosen from probabilities: greedy decoding and sampling.</li>
-  <li>What temperature, top-k, top-p, min-p and repetition penalties really do.</li>
-  <li>Max tokens, stop sequences, seeds and why outputs are not perfectly repeatable.</li>
-  <li>Streaming, JSON mode and schema-constrained output.</li>
-</ul>
+<h2><span class="ix">1</span>What is decoding?</h2>
+<div class="oneline" data-def><small>Interview answer — say this first</small></div>
+<div class="simple"><b>In simple words</b>
+<p>At every step, the model gives a list of possible next tokens with probabilities. <b>Decoding</b> is the rule that picks one of them. Settings like <b>temperature</b> and <b>top-p</b> decide whether the model plays safe (always picks the top choice) or takes more risks (sometimes picks a less likely token).</p></div>
 
-<h2><span class="ix">2</span>Why it matters</h2>
-<p>The same model and prompt can give a careful factual answer or a creative, unreliable one, depending only on the decoding settings. For RAG you want <b>focused, repeatable, well-formed</b> answers, and that is mostly a matter of choosing these settings deliberately and recording them.</p>
+<h2><span class="ix">2</span>Why do we need it?</h2>
+<p>The model does not output a word. It outputs <b>probabilities</b>, for example: "30 days" 58%, "14 days" 26%, "60 days" 12%. Someone must choose. The same model with the same prompt can give careful or creative answers depending <b>only</b> on these settings.</p>
+<div class="pc">
+  <div class="pro"><h4>Low temperature (focused)</h4><ul>
+    <li>Almost always picks the most likely token</li>
+    <li>Consistent, factual answers</li>
+    <li>Best for RAG, extraction, classification</li>
+  </ul></div>
+  <div class="con"><h4>High temperature (creative)</h4><ul>
+    <li>Often picks less likely tokens</li>
+    <li>More variety, more surprises</li>
+    <li>More risk of made-up details</li>
+  </ul></div>
+</div>
+<div class="analogy"><b>Analogy: choosing a restaurant</b>
+<p><b>Greedy</b> = always go to the #1 rated place. <b>Temperature</b> = how adventurous you feel today. <b>Top-k</b> = only consider the top 5 places. <b>Top-p</b> = consider the best places until together they have 90% of all the votes.</p></div>
 
-<h2><span class="ix">3</span>Core ideas</h2>
-<h3>From logits to a token</h3>
-<p>The model outputs a score (<b>logit</b>) for every vocabulary token. Softmax converts the scores to probabilities. A <b>decoding strategy</b> then picks one token:</p>
-<ul>
-  <li><b>Greedy</b>: always take the most likely token. Deterministic, but it can get repetitive.</li>
-  <li><b>Sampling</b>: draw a token at random according to the probabilities, after reshaping them with the settings below.</li>
-  <li><b>Beam search</b>: keep several candidate sequences. Used for translation; rarely for chat.</li>
-</ul>
+<h2><span class="ix">3</span>How does it work?</h2>
+<div class="stepcards">
+  <div class="sc"><span class="num">1</span><div><h4>The model gives raw scores (logits)</h4>
+    <p>For every token in the vocabulary, the model outputs a raw score called a <b>logit</b>. Higher = more likely.</p>
+    <div class="eg"><b>Example:</b> "30 days" 3.2 · "14 days" 2.4 · "60 days" 1.6 · "the warranty" 0.4</div></div></div>
+  <div class="sc"><span class="num">2</span><div><h4>Divide the scores by the temperature</h4>
+    <p>Temperature below 1 makes the gaps between scores bigger (more focused). Above 1 makes them smaller (more random).</p></div></div>
+  <div class="sc"><span class="num">3</span><div><h4>Softmax turns scores into probabilities</h4>
+    <p>The scores become probabilities that add up to 100%.</p></div></div>
+  <div class="sc"><span class="num">4</span><div><h4>Filter with top-k or top-p</h4>
+    <p><b>Top-k</b> keeps only the k most likely tokens. <b>Top-p</b> keeps the smallest group of top tokens whose probabilities add up to p (for example 90%). Unlikely "junk" tokens are removed.</p></div></div>
+  <div class="sc"><span class="num">5</span><div><h4>Pick one token</h4>
+    <p><b>Greedy</b> takes the top token. <b>Sampling</b> picks randomly, following the probabilities. The chosen token is added to the text, and the loop continues (lesson 01).</p></div></div>
+</div>
+<div class="pic">
+  <div class="chain">
+    <div class="c">Logits<small>raw scores</small></div>
+    <div class="c a">÷ temperature</div>
+    <div class="c">Softmax<small>probabilities</small></div>
+    <div class="c c3">Top-k / top-p<small>remove unlikely tokens</small></div>
+    <div class="c b">Pick one token</div>
+  </div>
+</div>
+<p class="cap">Draw this pipeline: scores → temperature → probabilities → filter → pick.</p>
 
-<h3>The knobs</h3>
+<h2><span class="ix">4</span>Example: step by step</h2>
+<h3>The same scores at three temperatures</h3>
+<p>Next-token candidates after "Our refund policy allows returns within …":</p>
 <table class="t">
-  <tr><th>Setting</th><th>What it does</th><th>Typical values</th></tr>
-  <tr><td><b>temperature</b></td><td>Divides logits by T before softmax. T &lt; 1 sharpens toward the top token; T &gt; 1 flattens toward more random choices. T = 0 means greedy.</td><td>RAG / extraction: 0–0.3 · chat: 0.5–0.8 · brainstorming: 0.9–1.2</td></tr>
-  <tr><td><b>top-k</b></td><td>Keep only the k most likely tokens.</td><td>20–50 (or off)</td></tr>
-  <tr><td><b>top-p</b> (nucleus)</td><td>Keep the smallest set of tokens whose probabilities add up to p.</td><td>0.8–0.95</td></tr>
-  <tr><td><b>min-p</b></td><td>Drop tokens below p × (top probability). It adapts to the model's confidence.</td><td>0.05–0.1</td></tr>
-  <tr><td><b>repetition / frequency / presence penalty</b></td><td>Lower the scores of tokens already used, to reduce loops.</td><td>small (1.05–1.15 or 0.1–0.5)</td></tr>
-  <tr><td><b>max_tokens</b></td><td>Hard limit on output length.</td><td>sized to the expected answer + margin</td></tr>
-  <tr><td><b>stop</b></td><td>Strings that end generation (e.g. <code>"\n\nQuestion:"</code>).</td><td>as needed</td></tr>
-  <tr><td><b>seed</b></td><td>Fixes the random sampling.</td><td>for tests and evaluation</td></tr>
+  <tr><th>Token</th><th>Logit</th><th>T = 0.5</th><th>T = 1.0</th><th>T = 2.0</th></tr>
+  <tr><td>"30 days"</td><td>3.2</td><td><b>80%</b></td><td>58%</td><td>42%</td></tr>
+  <tr><td>"14 days"</td><td>2.4</td><td>16%</td><td>26%</td><td>28%</td></tr>
+  <tr><td>"60 days"</td><td>1.6</td><td>3%</td><td>12%</td><td>19%</td></tr>
+  <tr><td>"the warranty"</td><td>0.4</td><td>0.3%</td><td>4%</td><td>10%</td></tr>
 </table>
-
+<div class="remember"><b>Remember</b>
+<p>Low temperature <b>sharpens</b> the probabilities toward the top token. High temperature <b>flattens</b> them, so unlikely tokens are picked more often. <b>Temperature 0 = greedy</b>: always the top token.</p></div>
+<div class="example"><b>Top-p = 0.9 at temperature 1</b>
+<p>Add tokens from the top until the total reaches 90%: 58% → 84% → <b>96%</b>. So keep "30 days", "14 days" and "60 days", remove the rest, and sample from these three.</p></div>
 <div class="demo">
   <h4>Try it: temperature and top-p</h4>
-  <div class="hint">Next-token candidates after "Our refund policy allows returns within …". Move the sliders and watch the probabilities.</div>
+  <div class="hint">Move the sliders and watch the probabilities change.</div>
   <label>temperature <input type="range" id="t" min="0.05" max="2" step="0.05" value="1"><b id="tv"></b></label>
   <label>top-p <input type="range" id="p" min="0.1" max="1" step="0.05" value="1"><b id="pv"></b></label>
   <div class="out" id="bars"></div>
 </div>
 
-<h2><span class="ix">4</span>How it works in an application</h2>
-<h3>Streaming</h3>
-<p>Tokens are sent to the browser as they are generated, using Server-Sent Events (SSE) or WebSockets. Total time is unchanged, but users see the answer start quickly. The key latency metric becomes <b>time to first token (TTFT)</b>.</p>
+<h3>Other settings you must know</h3>
+<div class="gloss">
+  <div><b>max_tokens</b><p>The hard limit on answer length. Too low → answers and JSON get cut off.</p></div>
+  <div><b>Stop sequences</b><p>Text that ends the output immediately, for example <code>"\nQuestion:"</code>.</p></div>
+  <div><b>Repetition penalties</b><p>Lower the chance of repeating the same tokens, to stop loops.</p></div>
+  <div><b>Seed</b><p>Fixes the randomness so a test gives the same output again.</p></div>
+  <div style="grid-column: 1 / -1"><b>Streaming</b><p>Send each token to the user as soon as it is made. The answer feels fast. The key number is <b>time to first token (TTFT)</b>.</p></div>
+</div>
 
-<h3>Structured output</h3>
+<h3>How to get reliable JSON output</h3>
 <ol class="steps">
-  <li><b>Ask</b> for JSON in the prompt and show an example. Simple, but it fails sometimes.</li>
-  <li><b>JSON mode</b>: the server guarantees syntactically valid JSON.</li>
-  <li><b>Schema-constrained decoding</b>: at each step, tokens that would break a given JSON Schema or grammar are masked out. Examples: llama.cpp grammars, vLLM guided decoding, Ollama's structured outputs. The output always parses.</li>
-  <li><b>Always validate</b> the result (for example with Pydantic) and decide what to do on failure: repair once or fail.</li>
+  <li><b>Ask for it in the prompt</b> and show an example. This works most of the time.</li>
+  <li><b>JSON mode</b>: the server guarantees the output is valid JSON.</li>
+  <li><b>Constrained decoding</b> with a JSON Schema: at every step, tokens that would break the schema are blocked. The output always has the right structure.</li>
+  <li><b>Always validate in code</b> (for example with Pydantic). Repair once, or fail clearly.</li>
 </ol>
-<pre><code>{"answer": "Returns are accepted within 30 days [1].",
- "citations": [1],
- "answerable": true}</code></pre>
 
-<h3>Reasoning models</h3>
-<p>Reasoning models write hidden or visible "thinking" tokens before the answer. Expect higher latency and token usage. Some servers let you set a thinking budget or switch thinking off. For short factual RAG answers, a non-reasoning instruct model is often enough and much faster.</p>
+<h2><span class="ix">5</span>Important terms</h2>
+<div class="gloss">
+  <div><b>Logits</b><p>The raw scores for every token, before softmax.</p></div>
+  <div><b>Softmax</b><p>Turns scores into probabilities that add up to 1.</p></div>
+  <div><b>Greedy decoding</b><p>Always pick the most likely token.</p></div>
+  <div><b>Sampling</b><p>Pick a token randomly, following the probabilities.</p></div>
+  <div><b>Temperature</b><p>Divides the logits before softmax. Lower = more focused; higher = more random.</p></div>
+  <div><b>Top-k</b><p>Keep only the k most likely tokens.</p></div>
+  <div><b>Top-p (nucleus sampling)</b><p>Keep the smallest set of top tokens whose probabilities add up to p.</p></div>
+  <div><b>Beam search</b><p>Keep several best partial answers at once. Used for translation, rarely for chat.</p></div>
+  <div><b>Constrained decoding</b><p>Block any token that would break a schema or grammar.</p></div>
+  <div><b>TTFT</b><p>Time to first token: how long the user waits before the answer starts.</p></div>
+</div>
 
-<h2><span class="ix">5</span>In the real world</h2>
-<ul>
-  <li><b>Factual RAG</b>: temperature 0–0.3, top-p about 0.9, a sensible max_tokens and a schema for the answer. Creativity is a bug here.</li>
-  <li><b>Temperature 0 is not perfectly deterministic</b> on GPUs. Batching and floating-point order can still change outputs slightly. Fix seeds and settings for evaluation, but compare results on many cases, not one.</li>
-  <li><b>Record every setting</b> with each answer so results can be reproduced and compared.</li>
-  <li>Truncated JSON is the classic symptom of a <b>max_tokens that is too low</b>.</li>
-</ul>
+<h2><span class="ix">6</span>Types and comparison</h2>
+<table class="t">
+  <tr><th></th><th>Greedy</th><th>Sampling</th><th>Beam search</th></tr>
+  <tr><td><b>Randomness</b></td><td>none</td><td>controlled by temperature, top-k, top-p</td><td>none</td></tr>
+  <tr><td><b>Good for</b></td><td>extraction, short factual answers</td><td>chat, creative writing</td><td>translation, short exact outputs</td></tr>
+  <tr><td><b>Risk</b></td><td>can repeat itself</td><td>made-up details at high temperature</td><td>slow and dull for chat</td></tr>
+</table>
+<table class="t">
+  <tr><th></th><th>Top-k</th><th>Top-p</th></tr>
+  <tr><td><b>Keeps</b></td><td>a fixed number of tokens</td><td>as many tokens as needed to reach probability p</td></tr>
+  <tr><td><b>When the model is sure</b></td><td>still keeps k tokens (may include junk)</td><td>keeps very few tokens</td></tr>
+  <tr><td><b>When the model is unsure</b></td><td>may remove good options</td><td>keeps more options</td></tr>
+</table>
+<div class="remember"><b>Remember</b>
+<p>Top-p adapts to how confident the model is. That is why top-p is used more often than top-k.</p></div>
 
-<h2><span class="ix">6</span>Common mistakes</h2>
-<ul>
-  <li>High temperature for factual question answering.</li>
-  <li>Changing temperature and top-p together, then not knowing which one helped.</li>
-  <li>Parsing model JSON without validation, or without a schema.</li>
-  <li>Not streaming, so users stare at a spinner for 5–10 seconds.</li>
-</ul>
+<h2><span class="ix">7</span>Advantages and limitations</h2>
+<div class="pc">
+  <div class="pro"><h4>Why these settings help</h4><ul>
+    <li>One model can be careful or creative, without retraining</li>
+    <li>Low temperature makes RAG answers consistent</li>
+    <li>Top-p removes junk tokens</li>
+    <li>Constrained decoding guarantees valid JSON</li>
+  </ul></div>
+  <div class="con"><h4>Things to watch</h4><ul>
+    <li>Temperature 0 is still not 100% identical every time</li>
+    <li>High temperature increases hallucination</li>
+    <li>Too-low max_tokens cuts answers off</li>
+    <li>Settings that work for one model may not suit another</li>
+  </ul></div>
+</div>
 
-<h2><span class="ix">7</span>In our platform</h2>
-<div class="platform"><h4>Where this lives</h4><ul>
-  <li><code>generation_definitions.generation_config</code> holds temperature, top-p, max_tokens and stop sequences. LiteLLM passes them to Ollama or vLLM.</li>
-  <li>The React chat receives a <b>streamed answer</b>; TTFT is tracked in Langfuse.</li>
-  <li>The <b>Validate answer schema</b> step checks the structured answer before anything is returned.</li>
-  <li><code>answer_records.token_usage_json</code> and <code>latency_ms</code> record what each answer cost.</li>
+<h2><span class="ix">8</span>Where is it used?</h2>
+<table class="t">
+  <tr><th>Use case</th><th>Typical settings</th></tr>
+  <tr><td>RAG question answering</td><td>temperature 0–0.3, top-p ≈ 0.9, max_tokens sized for the answer, JSON schema</td></tr>
+  <tr><td>Data extraction / classification</td><td>temperature 0, constrained JSON output</td></tr>
+  <tr><td>Chat assistant</td><td>temperature 0.5–0.8</td></tr>
+  <tr><td>Brainstorming, creative writing</td><td>temperature 0.9–1.2</td></tr>
+</table>
+<div class="example"><b>Real example: a policy bot giving different answers</b>
+<p>Users complain that the HR bot gives a different leave number each time they ask. The team finds the temperature is set to 1.0. They lower it to 0.1, add citations, and the answers become consistent and match the policy.</p></div>
+<div class="platform"><h4>In our platform</h4><ul>
+  <li><code>generation_definitions.generation_config</code> stores temperature, top-p, max_tokens and stop sequences. LiteLLM passes them to Ollama or vLLM.</li>
+  <li>Answers are <b>streamed</b> to the React UI, and time to first token is tracked in Langfuse.</li>
+  <li>The <b>Validate answer schema</b> step checks the JSON before anything is shown to the user.</li>
 </ul></div>
 
-<h2><span class="ix">8</span>Check yourself</h2>
-<details class="q"><summary>What happens to the probabilities when temperature goes from 1.0 to 0.2?</summary><div>The distribution becomes much sharper: the top token gets most of the probability and unlikely tokens almost disappear. Output becomes more predictable.</div></details>
-<details class="q"><summary>Top-p = 0.9 — which tokens remain?</summary><div>The smallest group of most likely tokens whose probabilities add up to at least 90%. The long tail of unlikely tokens is removed before sampling.</div></details>
-<details class="q"><summary>Your JSON answers sometimes end with <code>"citations": [1, </code>. What is the likely cause?</summary><div>The answer hit max_tokens. Raise the limit, shorten the requested output, and validate so truncated JSON is caught.</div></details>
-
-<h2><span class="ix">9</span>Key terms · Go deeper</h2>
-<div class="terms"><span><b>logits</b></span><span><b>softmax</b></span><span><b>greedy</b></span><span><b>sampling</b></span><span><b>temperature</b></span><span><b>top-k / top-p / min-p</b></span><span><b>stop sequence</b></span><span><b>TTFT</b></span><span><b>constrained decoding</b></span><span><b>JSON Schema</b></span></div>
-<ul class="refs">
-  <li>Holtzman et al. — <a href="https://arxiv.org/abs/1904.09751">The Curious Case of Neural Text Degeneration</a> (nucleus / top-p sampling)</li>
-  <li><a href="https://github.com/ollama/ollama/blob/main/docs/api.md">Ollama API</a> — generation options and structured outputs</li>
-  <li><a href="https://docs.vllm.ai/">vLLM documentation</a> — sampling parameters and structured outputs</li>
-</ul>
+<h2><span class="ix">9</span>How to explain it in an interview</h2>
+<div class="script"><b>Your 1-minute answer</b>
+<p><span class="part">Definition</span>Decoding is the process by which a language model selects each next token from the probability distribution it predicts.</p>
+<p><span class="part">How it works</span>The model outputs logits, which are divided by the temperature and converted into probabilities with softmax. Top-k or top-p then removes unlikely tokens, and one token is selected, either greedily or by sampling.</p>
+<p><span class="part">Example</span>With low temperature, "30 days" goes from 58% to 80%, so the model almost always picks it. With high temperature, the less likely options are chosen more often.</p>
+<p><span class="part">In practice</span>For a factual RAG assistant I use a low temperature, around 0 to 0.3, with top-p around 0.9, enough max_tokens, and schema-constrained JSON output that is validated in code.</p></div>
+<div class="trap">
+  <div class="no"><b>Don't say</b>"Temperature 0 is always 100% deterministic."</div>
+  <div class="yes"><b>Say instead</b>"It is greedy, but GPU batching and floating-point order can still cause small differences."</div>
+  <div class="no"><b>Don't say</b>"Higher temperature makes the model smarter."</div>
+  <div class="yes"><b>Say instead</b>"It only makes the choice more random: more variety and more risk of errors."</div>
+  <div class="no"><b>Don't say</b>"We just ask for JSON and parse it."</div>
+  <div class="yes"><b>Say instead</b>"We use constrained decoding or JSON mode, and always validate against a schema."</div>
+</div>
 
 <script>
 (function () {
@@ -113,14 +180,14 @@
     const T = +t.value, P = +p.value;
     document.getElementById("tv").textContent = T.toFixed(2);
     document.getElementById("pv").textContent = P.toFixed(2);
-    const ex = toks.map(([, l]) => Math.exp(l / T)); const z = ex.reduce((a, b) => a + b, 0);
-    let probs = toks.map(([w], i) => ({ w, pr: ex[i] / z })).sort((a, b) => b.pr - a.pr);
+    const ex = toks.map(([, l]) => Math.exp(l / T)), z = ex.reduce((a, b) => a + b, 0);
+    const probs = toks.map(([w], i) => ({ w, pr: ex[i] / z })).sort((a, b) => b.pr - a.pr);
     let cum = 0; probs.forEach((x) => { x.keep = cum < P - 1e-9; cum += x.pr; });
     const kept = probs.filter((x) => x.keep).reduce((a, x) => a + x.pr, 0);
     document.getElementById("bars").innerHTML = probs.map((x) => {
-      const final = x.keep ? x.pr / kept : 0;
-      return `<div class="barrow"><span>${x.w}</span><span class="b" style="width:${(final * 100).toFixed(1)}%;opacity:${x.keep ? 1 : .25}"></span><span>${(final * 100).toFixed(1)}%</span></div>`;
-    }).join("") + `<div class="hint" style="margin-top:8px">Faded rows are removed by top-p. Probabilities shown after renormalizing the kept tokens.</div>`;
+      const f = x.keep ? x.pr / kept : 0;
+      return `<div class="barrow"><span>${x.w}</span><span class="b" style="width:${(f * 100).toFixed(1)}%;opacity:${x.keep ? 1 : .25}"></span><span>${(f * 100).toFixed(1)}%</span></div>`;
+    }).join("") + `<div class="hint" style="margin-top:8px">Faded rows are removed by top-p. The kept probabilities are scaled back up to 100%.</div>`;
   }
   t.addEventListener("input", draw); p.addEventListener("input", draw); draw();
 })();

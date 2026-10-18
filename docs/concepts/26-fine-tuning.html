@@ -3,99 +3,164 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Fine-tuning & model adaptation</title>
+<title>Fine-tuning, LoRA & RLHF</title>
 <link rel="stylesheet" href="assets/concepts.css">
 </head>
 <body data-lesson="26">
 <main><article class="content">
 
-<h2><span class="ix">1</span>What you will learn</h2>
-<ul>
-  <li>The adaptation ladder: what to try before fine-tuning.</li>
-  <li>What fine-tuning is good at — and what it is not.</li>
-  <li>LoRA and QLoRA, preference tuning (DPO) and distillation.</li>
-  <li>Fine-tuning embedding and reranker models for your domain, which is often the best payoff in RAG.</li>
-</ul>
+<h2><span class="ix">1</span>What is fine-tuning?</h2>
+<div class="oneline" data-def><small>Interview answer — say this first</small></div>
+<div class="simple"><b>In simple words</b>
+<p>Fine-tuning means taking a model that is already trained and <b>training it a little more</b> on your own examples, so it learns a new <b>behaviour</b>: a format, a style, a task. <b>LoRA</b> makes this cheap by training only small add-on parts. <b>RLHF</b> and <b>DPO</b> teach a model which answers people <b>prefer</b>.</p></div>
 
-<h2><span class="ix">2</span>Why it matters</h2>
-<p>Fine-tuning is often proposed first and needed last. Done for the wrong reason, it costs weeks and makes knowledge stale. Done for the right reason, it gives a smaller, cheaper model that follows your format perfectly, or a retriever that finally understands your jargon.</p>
+<h2><span class="ix">2</span>Why do we need it?</h2>
+<p>Fine-tuning is often suggested <b>first</b> and needed <b>last</b>. Done for the wrong reason (to "teach the documents"), it costs weeks and the knowledge goes out of date. Done for the right reason, it gives a smaller, cheaper model that follows your format perfectly, or a retriever that finally understands your company's jargon.</p>
+<div class="pc">
+  <div class="pro"><h4>Fine-tuning is good for</h4><ul>
+    <li>Consistent format, style and tone</li>
+    <li>Classification, extraction and routing tasks</li>
+    <li>Reliable JSON or tool-call formats</li>
+    <li>Making a small model as good as a big one on <i>your</i> task</li>
+    <li>Domain-tuned embedders and rerankers</li>
+  </ul></div>
+  <div class="con"><h4>Fine-tuning is poor for</h4><ul>
+    <li>Adding facts that change (use RAG)</li>
+    <li>Citations and traceability</li>
+    <li>Per-user access control</li>
+    <li>Fixing bad retrieval</li>
+  </ul></div>
+</div>
+<div class="remember"><b>Remember — the adaptation ladder (climb only as far as needed)</b>
+<p>1. Better prompts → 2. RAG for knowledge → 3. Better retrieval (chunking, hybrid, reranking) → 4. Fine-tune the embedder or reranker → 5. Fine-tune the LLM.</p></div>
 
-<h2><span class="ix">3</span>Core ideas</h2>
-<h3>The adaptation ladder — climb only as far as needed</h3>
+<h2><span class="ix">3</span>How does it work?</h2>
+<h3>How fine-tuning with LoRA works</h3>
+<div class="stepcards">
+  <div class="sc"><span class="num">1</span><div><h4>Prepare training examples</h4>
+    <p>Collect a few hundred to a few thousand clean, reviewed examples of input → ideal output. Quality matters more than quantity. Keep evaluation cases <b>out</b> of the training data.</p></div></div>
+  <div class="sc"><span class="num">2</span><div><h4>Freeze the base model</h4>
+    <p>The original weights are not changed. This keeps training cheap and avoids damaging the model.</p></div></div>
+  <div class="sc"><span class="num">3</span><div><h4>Add and train small LoRA adapters</h4>
+    <p><b>LoRA</b> adds small "low-rank" matrices to some layers and trains only those — often under 1% of the parameters. <b>QLoRA</b> does the same on a 4-bit base model, so a 7–14B model can be tuned on one GPU.</p></div></div>
+  <div class="sc"><span class="num">4</span><div><h4>Evaluate on held-out data</h4>
+    <p>Test on examples the model never saw, and check that general ability, safety and other languages did not get worse (<b>catastrophic forgetting</b>).</p></div></div>
+  <div class="sc"><span class="num">5</span><div><h4>Serve the adapter</h4>
+    <p>Load the small adapter file on top of the base model (vLLM supports this), or merge it into the base model.</p></div></div>
+</div>
+<h3>How preference tuning works: RLHF and DPO</h3>
+<div class="pic">
+  <h4>RLHF (Reinforcement Learning from Human Feedback)</h4>
+  <div class="chain">
+    <div class="c">Model writes 2+ answers</div>
+    <div class="c a">People rank them<small>which is better?</small></div>
+    <div class="c d">Train a reward model<small>predicts the human preference</small></div>
+    <div class="c b">Reinforcement learning (PPO)<small>model learns to get a high reward</small></div>
+  </div>
+  <h4>DPO (Direct Preference Optimization)</h4>
+  <div class="chain">
+    <div class="c">Pairs: better vs worse answer</div>
+    <div class="c b">Train the model directly<small>raise the better, lower the worse — no reward model</small></div>
+  </div>
+</div>
+<p class="cap">RLHF and DPO are how chat models learn to be helpful and safe (lesson 01, stage 3). DPO is simpler and very popular.</p>
+
+<h2><span class="ix">4</span>Example: step by step</h2>
+<div class="example"><b>Fine-tuning the retriever — the best payoff in RAG</b>
 <ol class="steps">
-  <li><b>Prompting</b>: clearer instructions, examples, schema (lesson 07).</li>
-  <li><b>RAG</b> for knowledge (lesson 08).</li>
-  <li><b>Better retrieval</b>: chunking, hybrid search, reranking (lessons 11–17).</li>
-  <li><b>Fine-tune the embedder and/or reranker</b> on domain query-passage pairs.</li>
-  <li><b>Fine-tune the LLM</b> for behaviour, format or cost.</li>
-</ol>
+  <li>Collect (question, relevant chunk) pairs from evaluation cases, user clicks and reviewed answers — or generate synthetic questions for each chunk with a local LLM and review them.</li>
+  <li>Find <b>hard negatives</b>: chunks the current retriever ranks high but that are wrong.</li>
+  <li>Train the embedder with a contrastive loss (sentence-transformers makes this a short script); train the reranker on (question, passage, label).</li>
+  <li>Evaluate on a <b>held-out</b> set: recall@k, MRR, nDCG.</li>
+  <li>A new embedder means re-embedding everything into a new index generation; a new reranker only changes query-time behaviour.</li>
+</ol></div>
+<div class="example"><b>Distillation: a small model that acts like a big one</b>
+<p>A large model (check its license) produces high-quality outputs for 5,000 real invoice-extraction inputs. The outputs are reviewed, and a small 3B model is fine-tuned on them with LoRA. The small model now matches the large one on <i>this task</i>, at a fraction of the cost and latency.</p></div>
 
+<h2><span class="ix">5</span>Important terms</h2>
+<div class="gloss">
+  <div><b>Fine-tuning</b><p>Further training of a pre-trained model on task-specific examples.</p></div>
+  <div><b>SFT (supervised fine-tuning)</b><p>Fine-tuning on examples of input with the ideal output.</p></div>
+  <div><b>PEFT</b><p>Parameter-efficient fine-tuning: train only a small number of parameters.</p></div>
+  <div><b>LoRA</b><p>Low-Rank Adaptation: train small low-rank matrices added to a frozen model.</p></div>
+  <div><b>QLoRA</b><p>LoRA on a 4-bit quantized base model, so big models fit on one GPU.</p></div>
+  <div><b>RLHF</b><p>Train a reward model from human rankings, then optimize the model with reinforcement learning.</p></div>
+  <div><b>DPO</b><p>Direct Preference Optimization: learn from better/worse answer pairs without a reward model.</p></div>
+  <div><b>Distillation</b><p>Train a small "student" model to imitate a large "teacher" model.</p></div>
+  <div><b>Catastrophic forgetting</b><p>The model loses general abilities after narrow fine-tuning.</p></div>
+  <div><b>Hard negatives</b><p>Wrong passages that look relevant; they teach a retriever fine distinctions.</p></div>
+</div>
+
+<h2><span class="ix">6</span>Types and comparison</h2>
+<h3>Fine-tuning vs RAG</h3>
 <table class="t">
-  <tr><th>Fine-tuning is good for</th><th>Fine-tuning is poor for</th></tr>
-  <tr><td>consistent format and style, tone, domain phrasing</td><td>adding facts that change (use RAG)</td></tr>
-  <tr><td>classification, extraction, routing tasks</td><td>citations and traceability</td></tr>
-  <tr><td>making a small model behave like a big one on <i>your</i> task (distillation)</td><td>per-user access control</td></tr>
-  <tr><td>reliable tool-call or JSON formats</td><td>fixing bad retrieval</td></tr>
+  <tr><th></th><th>RAG</th><th>Fine-tuning</th></tr>
+  <tr><td><b>Changes</b></td><td>what the model <b>knows</b> at question time</td><td>how the model <b>behaves</b></td></tr>
+  <tr><td><b>Update when documents change</b></td><td>re-index in minutes</td><td>retrain in hours to days</td></tr>
+  <tr><td><b>Citations</b></td><td>yes</td><td>no</td></tr>
+  <tr><td><b>Access control</b></td><td>yes, at search time</td><td>no</td></tr>
+  <tr><td><b>Best together?</b></td><td colspan="2">yes — RAG for knowledge, fine-tuning for format and style</td></tr>
+</table>
+<h3>Full fine-tuning vs LoRA vs QLoRA</h3>
+<table class="t">
+  <tr><th></th><th>Full fine-tuning</th><th>LoRA</th><th>QLoRA</th></tr>
+  <tr><td><b>Trains</b></td><td>all weights</td><td>small adapters (&lt;1%)</td><td>small adapters on a 4-bit base</td></tr>
+  <tr><td><b>GPU memory</b></td><td>very high</td><td>moderate</td><td>low</td></tr>
+  <tr><td><b>Output</b></td><td>a full new model</td><td>a small adapter file</td><td>a small adapter file</td></tr>
+  <tr><td><b>Typical use</b></td><td>model builders</td><td>most applications</td><td>limited hardware</td></tr>
+</table>
+<h3>RLHF vs DPO</h3>
+<table class="t">
+  <tr><th></th><th>RLHF</th><th>DPO</th></tr>
+  <tr><td><b>Needs a reward model?</b></td><td>yes</td><td>no</td></tr>
+  <tr><td><b>Training</b></td><td>reinforcement learning (e.g. PPO): complex, less stable</td><td>simple supervised-style loss: stable</td></tr>
+  <tr><td><b>Data</b></td><td>human rankings of answers</td><td>pairs of preferred vs rejected answers</td></tr>
 </table>
 
-<h2><span class="ix">4</span>How it works</h2>
-<h3>Parameter-efficient fine-tuning</h3>
-<ul>
-  <li><b>LoRA</b>: freeze the model; train small low-rank matrices added to some layers (often under 1% of the parameters). The adapters are small files, swappable per task.</li>
-  <li><b>QLoRA</b>: LoRA on top of a 4-bit quantized base model, so 7–14B models can be tuned on a single GPU.</li>
-  <li><b>Full fine-tuning</b>: update all weights. Most expensive; rarely needed for applications.</li>
-</ul>
-<h3>Preference tuning and distillation</h3>
-<ul>
-  <li><b>DPO</b> (and related methods): train on pairs of better vs worse answers to shift behaviour without a separate reward model.</li>
-  <li><b>Distillation</b>: generate high-quality outputs with a large model (check its license), then fine-tune a small model to imitate them.</li>
-</ul>
+<h2><span class="ix">7</span>Advantages and limitations</h2>
+<div class="pc">
+  <div class="pro"><h4>Advantages</h4><ul>
+    <li>Perfectly consistent format and style</li>
+    <li>Smaller, cheaper models for narrow tasks</li>
+    <li>Shorter prompts (no long instructions needed)</li>
+    <li>Retrievers that understand your jargon</li>
+  </ul></div>
+  <div class="con"><h4>Limitations</h4><ul>
+    <li>Needs good, reviewed training data</li>
+    <li>Knowledge goes out of date</li>
+    <li>Can cause catastrophic forgetting</li>
+    <li>Every change needs re-training and re-evaluation</li>
+    <li>License rules on model outputs and data</li>
+  </ul></div>
+</div>
 
-<h3>Fine-tuning retrievers — the RAG sweet spot</h3>
-<ol class="steps">
-  <li>Collect (query, relevant chunk) pairs from evaluation cases, user clicks and reviewed answers — or generate synthetic questions per chunk with a local LLM.</li>
-  <li>Mine <b>hard negatives</b>: chunks that the current retriever ranks high but are wrong.</li>
-  <li>Train with a contrastive loss (sentence-transformers makes this a short script); train rerankers on (query, passage, label).</li>
-  <li>Evaluate on a <b>held-out</b> set: recall@k, MRR, nDCG.</li>
-  <li>A new embedder → re-embed everything into a new index generation; a new reranker only changes query-time behaviour.</li>
-</ol>
-
-<h2><span class="ix">5</span>In the real world</h2>
-<ul>
-  <li><b>Data quality beats quantity</b>: a few hundred to a few thousand clean, reviewed examples are often enough for LoRA tasks.</li>
-  <li>Keep evaluation cases <b>out</b> of training data, or your scores become meaningless.</li>
-  <li>Watch for <b>regressions</b>: general ability, safety behaviour and other languages can degrade (catastrophic forgetting).</li>
-  <li>Respect model and data licenses. Some forbid using outputs to train other models.</li>
-  <li>Tools: Hugging Face PEFT and TRL, Unsloth, Axolotl, sentence-transformers. Serve LoRA adapters with vLLM or merge them into the base model.</li>
-</ul>
-
-<h2><span class="ix">6</span>Common mistakes</h2>
-<ul>
-  <li>Fine-tuning to "teach the documents" instead of using RAG.</li>
-  <li>Training on unreviewed, noisy model outputs.</li>
-  <li>No held-out evaluation, or leakage of test cases.</li>
-  <li>Changing the embedder without re-indexing.</li>
-</ul>
-
-<h2><span class="ix">7</span>In our platform</h2>
-<div class="platform"><h4>Where this lives</h4><ul>
+<h2><span class="ix">8</span>Where is it used?</h2>
+<div class="uses">
+  <div><b>Structured extraction</b>invoices, forms, résumés into exact JSON</div>
+  <div><b>Classification and routing</b>tickets, intents, sentiment</div>
+  <div><b>Brand voice</b>consistent tone in customer replies</div>
+  <div><b>Domain retrieval</b>embedders for legal or medical jargon</div>
+  <div><b>Distillation</b>small, fast models for high volume</div>
+  <div><b>Chat model training</b>SFT + RLHF / DPO</div>
+</div>
+<div class="platform"><h4>In our platform</h4><ul>
   <li>A fine-tuned model is a new <code>model_definitions</code> row (new revision); using it means a new <code>pipeline_versions</code> row — and, for embedders, a new index generation.</li>
-  <li>Training data comes from <code>evaluation_cases</code>, reviewed <code>failure_cases</code> and <code>user_feedback</code> (with consent and policy checks).</li>
+  <li>Training data comes from <code>evaluation_cases</code>, reviewed <code>failure_cases</code> and <code>user_feedback</code>, with consent and policy checks.</li>
   <li>The evaluation loop decides whether the tuned model is released.</li>
 </ul></div>
 
-<h2><span class="ix">8</span>Check yourself</h2>
-<details class="q"><summary>Your policies change monthly. Fine-tune or RAG?</summary><div>RAG: re-index when documents change. Fine-tuned knowledge goes stale and can't cite sources.</div></details>
-<details class="q"><summary>What makes QLoRA cheaper than LoRA on a full-precision model?</summary><div>The frozen base model is stored in 4-bit, cutting memory roughly 4×, so larger models fit on one GPU while only small adapters are trained.</div></details>
-<details class="q"><summary>Why fine-tune the embedder before the LLM in a RAG system?</summary><div>Retrieval quality usually limits RAG. A domain-tuned retriever finds the right chunks; the LLM can only use what it is given.</div></details>
-
-<h2><span class="ix">9</span>Key terms · Go deeper</h2>
-<div class="terms"><span><b>fine-tuning</b></span><span><b>PEFT</b></span><span><b>LoRA / QLoRA</b></span><span><b>adapter</b></span><span><b>DPO</b></span><span><b>distillation</b></span><span><b>hard-negative mining</b></span><span><b>catastrophic forgetting</b></span></div>
-<ul class="refs">
-  <li>Hu et al. — <a href="https://arxiv.org/abs/2106.09685">LoRA</a> · Dettmers et al. — <a href="https://arxiv.org/abs/2305.14314">QLoRA</a></li>
-  <li><a href="https://huggingface.co/docs/peft">Hugging Face PEFT</a> · <a href="https://huggingface.co/docs/trl">TRL</a></li>
-  <li><a href="https://sbert.net/docs/sentence_transformer/training_overview.html">Sentence Transformers — training overview</a> (embedders and rerankers)</li>
-</ul>
+<h2><span class="ix">9</span>How to explain it in an interview</h2>
+<div class="script"><b>Your 1-minute answer</b>
+<p><span class="part">Definition</span>Fine-tuning is the further training of a pre-trained model on a smaller, task-specific dataset so that it adapts its behaviour, such as output format, style or a specialized task.</p>
+<p><span class="part">How</span>Parameter-efficient methods like LoRA freeze the base model and train small low-rank adapters, usually under one percent of the parameters; QLoRA does this on a 4-bit base model so it fits on one GPU. Preference tuning, with RLHF or DPO, teaches the model which answers people prefer.</p>
+<p><span class="part">When</span>For knowledge I use RAG, because fine-tuned knowledge goes stale and cannot be cited. I fine-tune for consistent formats, narrow tasks, distillation into smaller models, and especially for domain-specific embedders and rerankers.</p>
+<p><span class="part">Risks</span>I use clean, reviewed data, keep evaluation cases out of training, and check for catastrophic forgetting and license restrictions.</p></div>
+<div class="trap">
+  <div class="no"><b>Don't say</b>"We fine-tune the LLM on our documents so it knows them."</div>
+  <div class="yes"><b>Say instead</b>"RAG for knowledge; fine-tuning for behaviour, format, cost — and often for the retriever."</div>
+  <div class="no"><b>Don't say</b>"RLHF and fine-tuning are the same thing."</div>
+  <div class="yes"><b>Say instead</b>"SFT learns from ideal answers; RLHF and DPO learn from preferences between answers."</div>
+</div>
 
 </article></main>
 <script src="assets/path.js"></script>

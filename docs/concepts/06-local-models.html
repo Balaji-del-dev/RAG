@@ -9,106 +9,157 @@
 <body data-lesson="06">
 <main><article class="content">
 
-<h2><span class="ix">1</span>What you will learn</h2>
-<ul>
-  <li>How to estimate GPU or RAM needs for a model: weights + KV cache + overhead.</li>
-  <li>What quantization is (GGUF, AWQ, GPTQ, FP8) and what it costs in quality.</li>
-  <li>When to use llama.cpp, Ollama or vLLM, and what a gateway like LiteLLM adds.</li>
-  <li>How to serve embedding and reranker models, and how to run fully offline.</li>
-</ul>
+<h2><span class="ix">1</span>What does "running a model locally" mean?</h2>
+<div class="oneline" data-def><small>Interview answer — say this first</small></div>
+<div class="simple"><b>In simple words</b>
+<p>Instead of sending your data to an online AI service, you run the model on your own server with your own GPU. The model must fit into the GPU's memory. <b>Quantization</b> makes the model smaller so it fits, and a <b>serving engine</b> like Ollama or vLLM runs it and gives your app an API.</p></div>
 
-<h2><span class="ix">2</span>Why it matters</h2>
-<p>An offline platform lives or dies by hardware fit. A model that does not fit spills to CPU and becomes 10–50× slower. A context window set too large leaves room for only one user. Knowing the memory math up front avoids buying the wrong GPU, or picking a model you can't run.</p>
+<h2><span class="ix">2</span>Why do we need it?</h2>
+<div class="pc">
+  <div class="con"><h4>Cloud API (e.g. a hosted model)</h4><ul>
+    <li>Your documents leave the company</li>
+    <li>Needs internet; not allowed in some offices</li>
+    <li>Cost grows with every token</li>
+    <li>The provider can change or remove the model</li>
+  </ul></div>
+  <div class="pro"><h4>Local model</h4><ul>
+    <li>Data never leaves your servers (privacy, compliance)</li>
+    <li>Works fully offline</li>
+    <li>Fixed hardware cost, no per-token bill</li>
+    <li>You control the exact model version</li>
+  </ul></div>
+</div>
+<div class="analogy"><b>Analogy: a desk, a book and notes</b>
+<p>The <b>GPU memory</b> (VRAM) is your desk. The <b>model weights</b> are a huge book that must lie open on the desk. Each conversation needs its own <b>notes</b> (the KV cache), which grow as the conversation gets longer. <b>Quantization</b> is printing the book in a smaller font: it takes less space, with a small loss in quality. If it doesn't fit on the desk, part moves to normal RAM and everything becomes 10–50× slower.</p></div>
 
-<h2><span class="ix">3</span>Core ideas</h2>
-<h3>Memory math</h3>
-<pre><code>weights  ≈ parameters × bytes per parameter
-           8B × 2 bytes (FP16)   ≈ 16 GB
-           8B × 1 byte  (INT8)   ≈  8 GB
-           8B × ~0.55 byte (4-bit) ≈ 4.5–5 GB
-total    ≈ weights + KV cache (per token × tokens × concurrent requests) + 10–20% overhead</code></pre>
-<p>From lesson 04, Llama-3-8B needs about 128 KB of KV cache per token in FP16. So 4 users × 8K tokens ≈ 4 GB of cache on top of the weights.</p>
+<h2><span class="ix">3</span>How does it work?</h2>
+<div class="stepcards">
+  <div class="sc"><span class="num">1</span><div><h4>Choose a model and a size</h4>
+    <p>Pick an open-weight model (Llama, Qwen, Mistral, Gemma) with a size your GPU can hold, such as 7–8B or 70B parameters.</p></div></div>
+  <div class="sc"><span class="num">2</span><div><h4>Quantize it so it fits</h4>
+    <p>Normally each parameter takes 2 bytes (16-bit). Quantization stores it with fewer bits, for example 4-bit (about 0.55 bytes). The model becomes about 4× smaller.</p>
+    <div class="eg"><b>Example:</b> 8B model: 16 GB at 16-bit → about 5 GB at 4-bit</div></div></div>
+  <div class="sc"><span class="num">3</span><div><h4>Check that weights + KV cache fit in GPU memory</h4>
+    <p>GPU memory needed ≈ <b>weights</b> + <b>KV cache</b> (grows with tokens and users) + 10–20% overhead.</p></div></div>
+  <div class="sc"><span class="num">4</span><div><h4>Serve it with an engine</h4>
+    <p><b>Ollama</b> is the easy choice for a laptop or a small team. <b>vLLM</b> is built for many users at once on GPU servers. Both give an OpenAI-compatible API.</p></div></div>
+  <div class="sc"><span class="num">5</span><div><h4>Put a gateway in front</h4>
+    <p>A gateway such as <b>LiteLLM</b> gives the app one API for all models and adds routing, retries, timeouts and logging.</p></div></div>
+</div>
+<div class="pic">
+  <h4>The memory equation</h4>
+  <div class="chain">
+    <div class="c a">Model weights<small>parameters × bytes each</small></div>
+    <div class="c c3">KV cache<small>tokens × users</small></div>
+    <div class="c">Overhead<small>10–20%</small></div>
+    <div class="c b">GPU memory needed</div>
+  </div>
+  <h4>The serving stack</h4>
+  <div class="chain">
+    <div class="c">Your app</div>
+    <div class="c d">Gateway (LiteLLM)<small>one API, retries, routing</small></div>
+    <div class="c a">Ollama / vLLM<small>serving engine</small></div>
+    <div class="c b">GPU</div>
+  </div>
+</div>
+<p class="cap">Draw both on the whiteboard: the memory equation and the serving stack.</p>
 
-<h3>Quantization</h3>
-<p>Quantization stores weights with fewer bits. Quality drops a little, while memory and speed improve a lot.</p>
+<h2><span class="ix">4</span>Example: step by step</h2>
+<div class="example"><b>Will an 8B model for 4 users fit on a 16 GB GPU?</b>
+<ol class="steps">
+  <li><b>Weights:</b> 8 billion parameters. At 16-bit (2 bytes) = 16 GB — too big. At 4-bit (≈0.55 bytes) ≈ <b>4.5–5 GB</b>.</li>
+  <li><b>KV cache:</b> ≈ 128 KB per token (lesson 04) × 8,000 tokens × 4 users ≈ <b>4 GB</b>.</li>
+  <li><b>Overhead:</b> working memory and buffers ≈ <b>1–2 GB</b>.</li>
+  <li><b>Total ≈ 10–11 GB</b> → it fits a 16 GB GPU, with room to spare.</li>
+</ol></div>
 <table class="t">
-  <tr><th>Format</th><th>Where</th><th>Notes</th></tr>
-  <tr><td><b>GGUF</b> (Q8_0, Q6_K, Q5_K_M, Q4_K_M …)</td><td>llama.cpp, Ollama</td><td>One file with weights and metadata. Runs on CPU, GPU or mixed. <b>Q4_K_M</b> is a popular balance; Q8_0 is close to full quality.</td></tr>
-  <tr><td><b>AWQ / GPTQ</b></td><td>vLLM and other GPU servers</td><td>4-bit GPU formats with good speed.</td></tr>
-  <tr><td><b>FP8</b></td><td>recent NVIDIA GPUs with vLLM</td><td>Near-lossless, about 2× smaller than FP16.</td></tr>
+  <tr><th>Precision</th><th>Bytes per parameter</th><th>8B model size</th><th>Quality</th></tr>
+  <tr><td>FP16 / BF16 (16-bit)</td><td>2</td><td>~16 GB</td><td>original</td></tr>
+  <tr><td>INT8 / FP8 (8-bit)</td><td>1</td><td>~8 GB</td><td>almost the same</td></tr>
+  <tr><td>4-bit (Q4_K_M, AWQ, GPTQ)</td><td>~0.55</td><td>~4.5–5 GB</td><td>small loss — test it on your own data</td></tr>
 </table>
-<div class="callout warn"><b>Measure, don't assume</b>4-bit models are usually fine for chat, but can lose accuracy on exact extraction, multilingual text and long contexts. Run your evaluation set on the exact quantization you will deploy.</div>
+<div class="remember"><b>Remember — the quick formula</b>
+<p>Weights in GB ≈ <b>billions of parameters × bytes per parameter</b>. 7B at 16-bit ≈ 14 GB; at 4-bit ≈ 4 GB. Then add the KV cache.</p></div>
 
-<h2><span class="ix">4</span>Serving engines</h2>
-<div class="cards">
-  <div class="card"><h4>llama.cpp</h4><p>C/C++ engine for GGUF models. Runs anywhere (CPU, Apple, NVIDIA, AMD) and includes an OpenAI-compatible server. Great for small machines.</p></div>
-  <div class="card"><h4>Ollama</h4><p>A friendly wrapper around llama.cpp: model library, <code>ollama pull</code>, REST and OpenAI-compatible API, automatic chat templates. Easiest start; good for low to moderate concurrency.</p></div>
-  <div class="card"><h4>vLLM</h4><p>High-throughput GPU server: PagedAttention, continuous batching, prefix caching and an OpenAI-compatible API. The choice when many users share GPUs.</p></div>
-  <div class="card"><h4>Others</h4><p>SGLang, Hugging Face TGI, TensorRT-LLM, LM Studio. The same OpenAI-style API is common to all of them.</p></div>
+<h2><span class="ix">5</span>Important terms</h2>
+<div class="gloss">
+  <div><b>VRAM</b><p>The GPU's own memory. The model and KV cache must fit here to run fast.</p></div>
+  <div><b>Quantization</b><p>Storing weights with fewer bits to save memory and gain speed, with a small quality loss.</p></div>
+  <div><b>GGUF</b><p>The single-file model format used by llama.cpp and Ollama (e.g. Q4_K_M, Q8_0).</p></div>
+  <div><b>AWQ / GPTQ / FP8</b><p>Quantized formats used on GPU servers such as vLLM.</p></div>
+  <div><b>Continuous batching</b><p>New requests join the running batch between steps, so the GPU is always busy.</p></div>
+  <div><b>PagedAttention</b><p>vLLM's way of storing the KV cache in small pages, so no memory is wasted.</p></div>
+  <div><b>TTFT, tokens/s, throughput</b><p>Time to first token · speed for one user · total tokens per second for all users.</p></div>
+  <div><b>Gateway</b><p>One API in front of many model servers: routing, retries, budgets and logs.</p></div>
+  <div><b>safetensors</b><p>A safe weight-file format that cannot run hidden code (unlike pickle files).</p></div>
+  <div><b>Open-weight model</b><p>A model whose weights you can download and run yourself.</p></div>
 </div>
 
-<h3>Latency vs throughput</h3>
-<ul>
-  <li><b>TTFT</b> (time to first token): dominated by prefill, so long prompts raise it.</li>
-  <li><b>ITL / TPOT</b> (time per output token): sets how fast the text streams.</li>
-  <li><b>Throughput</b> (tokens/second across all users): improved by batching. vLLM's continuous batching adds new requests between steps, so GPUs stay busy.</li>
-</ul>
-
-<h3>Gateways: LiteLLM</h3>
-<p>A gateway gives the application <b>one OpenAI-style API</b> to every backend. On top it adds routing, retries, fallbacks, timeouts, per-key budgets and logging. Swapping Ollama for vLLM, or one model for another, then becomes a configuration change instead of a code change.</p>
-
-<h3>Embedding and reranker models</h3>
-<ul>
-  <li>Small encoders can run inside the worker process (sentence-transformers, ONNX Runtime), or as a service (Hugging Face Text Embeddings Inference, Infinity). Ollama and vLLM also serve some embedding models.</li>
-  <li><b>Batch</b> embeddings (32–256 texts per call) for 10× better throughput during ingestion.</li>
-</ul>
-
-<h2><span class="ix">5</span>In the real world: running fully offline</h2>
-<ol class="steps">
-  <li><b>Pre-download</b> every model file during provisioning and store it locally (or in MinIO).</li>
-  <li><b>Pin and verify</b>: record the exact revision and SHA-256 of every file, and check them at startup.</li>
-  <li><b>Block runtime downloads</b>: for example <code>HF_HUB_OFFLINE=1</code>, and no "auto-pull" in production.</li>
-  <li><b>Prefer safe formats</b>: <code>safetensors</code> and GGUF. Avoid loading pickled <code>.bin</code> files from unknown sources, and never enable <code>trust_remote_code</code> for unreviewed code (lesson 23).</li>
-  <li><b>Lock down the network</b>: Ollama and vLLM have no authentication by default. Bind them to localhost or a private network, and expose only the gateway.</li>
-</ol>
-
+<h2><span class="ix">6</span>Types and comparison</h2>
 <table class="t">
-  <tr><th>Rough hardware guide (4-bit, single user)</th><th>Fits</th></tr>
-  <tr><td>8 GB GPU</td><td>7–8B instruct models with short contexts</td></tr>
-  <tr><td>16–24 GB GPU</td><td>8–14B comfortably, or ~30B MoE models at 4-bit; several users</td></tr>
-  <tr><td>48 GB+ (or 2 GPUs)</td><td>~70B at 4-bit</td></tr>
-  <tr><td>CPU only</td><td>small models only, a few tokens per second — fine for embeddings, slow for chat</td></tr>
+  <tr><th></th><th>llama.cpp</th><th>Ollama</th><th>vLLM</th></tr>
+  <tr><td><b>Best for</b></td><td>small machines, CPU or GPU</td><td>easy start: laptops, small teams</td><td>many users at once on GPUs</td></tr>
+  <tr><td><b>Model format</b></td><td>GGUF</td><td>GGUF (built on llama.cpp)</td><td>safetensors, AWQ, GPTQ, FP8</td></tr>
+  <tr><td><b>Throughput</b></td><td>low to medium</td><td>low to medium</td><td><b>high</b> (continuous batching, PagedAttention)</td></tr>
+  <tr><td><b>Setup</b></td><td>build or download a binary</td><td><code>ollama pull model</code></td><td>Python and GPU server setup</td></tr>
+  <tr><td><b>API</b></td><td>OpenAI-compatible</td><td>REST + OpenAI-compatible</td><td>OpenAI-compatible</td></tr>
 </table>
+<div class="remember"><b>Remember</b>
+<p>Ollama = easiest to start. vLLM = best for many concurrent users in production.</p></div>
 
-<h2><span class="ix">6</span>Common mistakes</h2>
-<ul>
-  <li>Sizing for weights only and forgetting the KV cache for context length × concurrency.</li>
-  <li>Evaluating on FP16 but deploying Q4 (or the reverse).</li>
-  <li>Letting a server download models at runtime in an "offline" system.</li>
-  <li>Exposing Ollama's port to the whole network.</li>
-  <li>Hard-coding one backend's API in application code instead of using the gateway.</li>
-</ul>
+<h2><span class="ix">7</span>Advantages and limitations</h2>
+<div class="pc">
+  <div class="pro"><h4>Advantages</h4><ul>
+    <li>Full data privacy; works offline</li>
+    <li>No per-token cost</li>
+    <li>Exact, fixed model version</li>
+    <li>Can be tuned and quantized for your needs</li>
+  </ul></div>
+  <div class="con"><h4>Limitations</h4><ul>
+    <li>Needs GPUs: big upfront cost</li>
+    <li>Open models may be weaker than the best cloud models</li>
+    <li>You must handle updates, scaling and security</li>
+    <li>4-bit quantization can reduce quality a little</li>
+  </ul></div>
+</div>
 
-<h2><span class="ix">7</span>In our platform</h2>
-<div class="platform"><h4>Where this lives</h4><ul>
-  <li><b>LiteLLM → Ollama or vLLM</b> in the online flow ("Grounded generation"), with routing, retries and timeouts in the gateway.</li>
-  <li><code>model_definitions</code>: provider, model name, revision and <code>parameters_json</code>, so every answer is traceable to an exact model.</li>
-  <li>Architecture rule 7: all model files and runtime dependencies are available locally.</li>
-  <li>The embedding model and cross-encoder run locally in Celery workers (ingestion) and in Django (queries).</li>
+<h2><span class="ix">8</span>Where is it used?</h2>
+<div class="uses">
+  <div><b>Banks and hospitals</b>data cannot leave the company</div>
+  <div><b>Government and defence</b>air-gapped, offline networks</div>
+  <div><b>Factories and field sites</b>no reliable internet</div>
+  <div><b>High-volume tasks</b>cheaper than paying per token</div>
+  <div><b>Developer laptops</b>test prompts locally with Ollama</div>
+  <div><b>Custom fine-tuned models</b>run your own adapted model</div>
+</div>
+<div class="example"><b>Real example: running fully offline and safely</b>
+<ol class="steps">
+  <li>Download every model file during setup and store it locally.</li>
+  <li>Record each file's exact version and SHA-256 checksum, and check them at startup.</li>
+  <li>Block downloads at runtime (for example <code>HF_HUB_OFFLINE=1</code>).</li>
+  <li>Use safe formats (safetensors, GGUF) and never enable <code>trust_remote_code</code> for unreviewed code.</li>
+  <li>Ollama and vLLM have <b>no login by default</b>: keep them on a private network and expose only the gateway.</li>
+</ol></div>
+<div class="platform"><h4>In our platform</h4><ul>
+  <li><b>LiteLLM → Ollama or vLLM</b> for answer generation. The gateway adds routing, retries and timeouts.</li>
+  <li><code>model_definitions</code> records the provider, model name, revision and settings, so every answer can be traced to an exact model.</li>
+  <li>Architecture rule: all model files and dependencies are available locally.</li>
 </ul></div>
 
-<h2><span class="ix">8</span>Check yourself</h2>
-<details class="q"><summary>Roughly how much memory do the weights of a 14B model need at FP16, INT8 and 4-bit?</summary><div>About 28 GB, 14 GB and 8 GB respectively, plus KV cache and overhead.</div></details>
-<details class="q"><summary>Why can vLLM serve more users per GPU than a simple server?</summary><div>Continuous batching keeps the GPU busy with many requests at once, and PagedAttention packs KV caches efficiently, avoiding wasted memory.</div></details>
-<details class="q"><summary>What does a gateway such as LiteLLM give you?</summary><div>One stable API for all model backends, plus routing, retries, fallbacks, timeouts, budgets and logging — so backends can change without code changes.</div></details>
-
-<h2><span class="ix">9</span>Key terms · Go deeper</h2>
-<div class="terms"><span><b>quantization</b></span><span><b>GGUF</b></span><span><b>AWQ / GPTQ / FP8</b></span><span><b>VRAM</b></span><span><b>continuous batching</b></span><span><b>PagedAttention</b></span><span><b>TTFT / ITL</b></span><span><b>gateway</b></span><span><b>safetensors</b></span></div>
-<ul class="refs">
-  <li>Kwon et al. — <a href="https://arxiv.org/abs/2309.06180">Efficient Memory Management for LLM Serving with PagedAttention</a> (vLLM)</li>
-  <li><a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a> · <a href="https://github.com/ollama/ollama">Ollama</a> · <a href="https://docs.vllm.ai/">vLLM docs</a> · <a href="https://docs.litellm.ai/">LiteLLM docs</a></li>
-  <li><a href="https://huggingface.co/docs/text-embeddings-inference">Text Embeddings Inference</a> — serving embedders and rerankers</li>
-</ul>
+<h2><span class="ix">9</span>How to explain it in an interview</h2>
+<div class="script"><b>Your 1-minute answer</b>
+<p><span class="part">Definition</span>Running a model locally means serving an LLM on our own hardware instead of calling an external API, so the data never leaves the organization.</p>
+<p><span class="part">How it works</span>The GPU must hold the model weights and the KV cache of active requests. Weights take about parameters times bytes per parameter, so a 7B model needs about 14 GB in 16-bit and about 4 GB in 4-bit. Quantization reduces this memory with a small quality loss.</p>
+<p><span class="part">Tools</span>I use Ollama for simple setups and development, and vLLM for production with many concurrent users, because continuous batching and PagedAttention give much higher throughput. A gateway like LiteLLM sits in front.</p>
+<p><span class="part">Trade-off</span>We gain privacy, offline operation and predictable cost, but we must manage GPUs, scaling and security ourselves, and evaluate the exact quantized model we deploy.</p></div>
+<div class="trap">
+  <div class="no"><b>Don't say</b>"A 7B model needs 7 GB."</div>
+  <div class="yes"><b>Say instead</b>"It depends on precision: about 14 GB in 16-bit, about 4 GB in 4-bit, plus the KV cache."</div>
+  <div class="no"><b>Don't say</b>"Quantization has no quality cost."</div>
+  <div class="yes"><b>Say instead</b>"8-bit is almost lossless; 4-bit has a small loss. We evaluate the exact model we deploy."</div>
+  <div class="no"><b>Don't say</b>"Ollama is the best choice for 200 concurrent users."</div>
+  <div class="yes"><b>Say instead</b>"For many users on GPUs, vLLM's continuous batching gives much higher throughput."</div>
+</div>
 
 </article></main>
 <script src="assets/path.js"></script>

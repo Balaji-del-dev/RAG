@@ -1,0 +1,42 @@
+// Interview content for lesson 15. def: interview definition · revise: revision card ·
+// qa: questions (l: B basic · I intermediate · A advanced; a: model answer; k: key words; f: likely follow-up).
+window.QA = window.QA || {};
+window.QA["15"] = {
+  def: "<b>Query transformation</b> is the set of techniques that prepare or reformulate a user's question before retrieval, so that the search finds the right documents. Simple steps such as normalization, intent classification and condensing follow-up questions are applied to every query, while advanced techniques — <b>query rewriting, multi-query retrieval, HyDE and decomposition</b> — use a language model to generate better search queries. Because each model call adds latency and can change the meaning, advanced techniques are enabled only when evaluation shows a measurable gain.",
+  revise: [
+    "Always: normalize the text, detect the language, extract and validate filters, classify intent.",
+    "In conversations, condense follow-up questions into standalone questions using the chat history.",
+    "Multi-query → several paraphrases fused; HyDE → embed a hypothetical answer; decomposition → sub-questions.",
+    "Routing sends each question to the right index, collection or tool.",
+    "Keep the original query, log every transformation, and add techniques only when evaluation proves a benefit.",
+  ],
+  qa: [
+    { l: "B", q: "What is query transformation in RAG?",
+      a: "Query transformation is the process of preparing or reformulating the user's question before retrieval so that the search system can find the most relevant documents. It ranges from simple steps, such as cleaning the text and turning a follow-up into a standalone question, to model-based techniques, such as rewriting the query, generating several paraphrases or splitting a complex question into sub-questions.",
+      k: ["prepare the query before retrieval", "standalone questions", "rewriting", "paraphrases", "sub-questions"] },
+    { l: "B", q: "Why is it necessary to condense follow-up questions in a chatbot?",
+      a: "Follow-up questions depend on earlier messages; for example, 'Does it include support?' does not say what 'it' refers to. Searching with such a question retrieves generic or irrelevant chunks. Condensing uses the conversation history to rewrite the follow-up into a standalone question, such as 'Does the Enterprise plan include support?', which retrieval can match correctly.",
+      k: ["context-dependent follow-ups", "pronouns", "conversation history", "standalone question"] },
+    { l: "B", q: "What is query rewriting?",
+      a: "Query rewriting uses a language model, or rules, to reformulate the user's question into a form that is better suited to retrieval — for example correcting spelling, expanding acronyms, removing conversational filler or adding domain terminology. It addresses vocabulary mismatch between how users ask and how documents are written. The original query should be kept as well, in case the rewrite changes the meaning.",
+      k: ["reformulate for retrieval", "acronym expansion", "vocabulary mismatch", "keep the original query"] },
+    { l: "I", q: "What is multi-query retrieval?",
+      a: "Multi-query retrieval generates several alternative phrasings of the user's question with a language model, runs retrieval for each phrasing, and merges the results, typically with Reciprocal Rank Fusion. Because different phrasings match different documents, it increases recall when a single query would miss relevant content. The trade-off is several times more retrieval work and an additional model call.",
+      k: ["several paraphrases", "retrieve for each", "fuse with RRF", "higher recall", "higher cost"] },
+    { l: "I", q: "What is HyDE, and what is its main risk?",
+      a: "HyDE, or Hypothetical Document Embeddings, asks a language model to write a hypothetical answer to the question and then uses the embedding of that answer, rather than the question, for retrieval. A hypothetical answer resembles the style and vocabulary of real passages, so it can match them more closely than a short question. Its main risk is that if the generated answer is wrong or off-topic, it steers retrieval toward irrelevant passages.",
+      k: ["Hypothetical Document Embeddings", "embed a generated answer", "matches passage style", "risk: wrong direction"] },
+    { l: "I", q: "What is query decomposition?",
+      a: "Query decomposition breaks a complex or multi-part question into simpler sub-questions that are retrieved separately, and then combines the results to produce the final answer. For example, 'Compare the leave policies of India and Germany' becomes one question for each country. It improves completeness for comparisons and multi-hop questions, at the cost of additional retrieval and generation steps.",
+      k: ["split into sub-questions", "retrieve separately", "combine results", "comparisons and multi-hop", "extra steps"] },
+    { l: "I", q: "What is query routing?",
+      a: "Query routing is the classification of each incoming question in order to send it to the most appropriate pipeline or data source — for example a document index, a structured database for numerical questions, a specific collection by department, or a polite refusal for out-of-scope requests. It is usually implemented with rules or a small classification model and improves both accuracy and efficiency.",
+      k: ["classify the question", "choose pipeline or data source", "structured vs unstructured", "out-of-scope handling"] },
+    { l: "A", q: "Why should filters extracted from a question by a language model be validated?",
+      a: "A language model may produce filter values that do not exist, are misspelled or fall outside the user's permitted scope. Unvalidated filters can return no results or, more seriously, bypass intended restrictions. Extracted filters should therefore be checked against a list of allowed values and combined with — never replace — the mandatory access-control filters.",
+      k: ["invented filter values", "empty results", "bypassing restrictions", "allowed-value validation", "mandatory access filters"] },
+    { l: "A", q: "How do you decide whether to adopt an advanced query transformation such as HyDE or multi-query?",
+      a: "I treat it as an experiment against a baseline. I run the evaluation set with and without the technique and compare retrieval metrics such as recall@k and MRR, answer quality, and the added latency and cost, examining the results by question type. I adopt the technique only for the question types where it produces a clear improvement, and I log the transformed queries in traces so their effect can be monitored.",
+      k: ["experiment against baseline", "recall@k and MRR", "latency and cost", "by question type", "log transformations"] },
+  ],
+};

@@ -3,109 +3,149 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lexical search & BM25</title>
+<title>Keyword search & BM25</title>
 <link rel="stylesheet" href="assets/concepts.css">
 </head>
 <body data-lesson="14">
 <main><article class="content">
 
-<h2><span class="ix">1</span>What you will learn</h2>
-<ul>
-  <li>How an inverted index works, and how text analysis (tokenizing, stemming) shapes it.</li>
-  <li>The BM25 formula, and what its two parameters (k1, b) control.</li>
-  <li>When keyword search beats vector search, and the reverse.</li>
-  <li>Practical OpenSearch mappings and queries for RAG, plus learned sparse retrieval.</li>
-</ul>
+<h2><span class="ix">1</span>What is keyword search and BM25?</h2>
+<div class="oneline" data-def><small>Interview answer — say this first</small></div>
+<div class="simple"><b>In simple words</b>
+<p>Keyword search finds chunks that contain the <b>same words</b> as the question. <b>BM25</b> is the formula that decides which matching chunk is best: rare words count more, repeating a word helps only a little, and long chunks don't win just because they are long.</p></div>
 
-<h2><span class="ix">2</span>Why it matters</h2>
-<p>Users search for exact things: invoice numbers, error codes, product names, people, clause numbers, acronyms. Embeddings blur these (lesson 03). BM25 matches them exactly, is explainable, needs no model, and in many benchmarks remains a strong baseline. Combining both (lesson 16) is the standard for good reason.</p>
-
-<h2><span class="ix">3</span>Core ideas</h2>
-<h3>Inverted index</h3>
-<table class="t">
-  <tr><th>Term</th><th>Posting list (document · positions)</th></tr>
-  <tr><td>leave</td><td>c12 · [4, 19] · c48 · [2] · c91 · [7]</td></tr>
-  <tr><td>carry</td><td>c12 · [5] · c77 · [11]</td></tr>
-  <tr><td>e-4012</td><td>c305 · [1]</td></tr>
-</table>
-<p>For a query, the engine looks up each term's postings and scores only the matching documents. That is why lexical search is fast on huge collections.</p>
-
-<h3>Text analysis</h3>
-<div class="flow">
-  <span class="bx">"Carried-over Days"</span><span class="ar">→</span>
-  <span class="bx">tokenizer<small>carried · over · days</small></span><span class="ar">→</span>
-  <span class="bx">lowercase<small>carried · over · days</small></span><span class="ar">→</span>
-  <span class="bx">stemmer<small>carri · over · dai</small></span>
+<h2><span class="ix">2</span>Why do we need it?</h2>
+<p>Embeddings (lesson 03) are great at meaning but weak at <b>exact</b> things: product codes, error numbers, names, invoice IDs. If the user asks about "E-4012", only keyword search reliably finds the document with that exact code.</p>
+<div class="pc">
+  <div class="pro"><h4>Keyword search (BM25) is strong at</h4><ul>
+    <li>Exact IDs, codes and numbers: "E-4012", "INV-48213"</li>
+    <li>Names and rare technical terms</li>
+    <li>Quoted phrases</li>
+    <li>No model needed; easy to explain</li>
+  </ul></div>
+  <div class="con"><h4>Keyword search is weak at</h4><ul>
+    <li>Different words, same meaning ("car" vs "vehicle")</li>
+    <li>Natural, conversational questions</li>
+    <li>Questions in another language</li>
+  </ul></div>
 </div>
-<p>The <b>same analyzer</b> runs on documents and queries, so "carry over" can match "carried over". Language-specific analyzers handle stemming and stop words. Codes and IDs belong in <code>keyword</code> fields, which are not analyzed, for exact matches.</p>
+<div class="remember"><b>Remember</b>
+<p>Keyword search and vector search fail on <b>different</b> questions. That is why production RAG uses both: hybrid search (lesson 16).</p></div>
 
-<h3>BM25</h3>
+<h2><span class="ix">3</span>How does it work?</h2>
+<div class="stepcards">
+  <div class="sc"><span class="num">1</span><div><h4>Analyze the text</h4>
+    <p>An <b>analyzer</b> splits text into words, lowercases them and reduces them to a root form (stemming). The same analyzer runs on documents and questions, so "carried over" matches "carry over".</p>
+    <div class="eg"><b>Example:</b> "Carried-over Days" → carri · over · day</div></div></div>
+  <div class="sc"><span class="num">2</span><div><h4>Build an inverted index</h4>
+    <p>For every word, store the list of chunks that contain it — like the index at the back of a textbook.</p>
+    <div class="eg"><b>Example:</b> leave → c12, c48, c91 · carri → c12, c77 · e-4012 → c305</div></div></div>
+  <div class="sc"><span class="num">3</span><div><h4>Look up the question's words</h4>
+    <p>At search time, analyze the question the same way and look up each word in the index. Only chunks that contain at least one word are candidates — this is very fast.</p></div></div>
+  <div class="sc"><span class="num">4</span><div><h4>Score the candidates with BM25</h4>
+    <p>BM25 gives each chunk a score using three rules: <b>rare words matter more</b> (IDF), <b>repetition helps but saturates</b>, and <b>length is normalized</b>. The highest scores come first.</p></div></div>
+</div>
+<div class="pic">
+  <div class="chain">
+    <div class="c">"Carried-over Days"</div>
+    <div class="c a">Tokenize<small>carried · over · days</small></div>
+    <div class="c a">Lowercase</div>
+    <div class="c a">Stem<small>carri · over · day</small></div>
+    <div class="c b">Inverted index<small>word → chunk list</small></div>
+  </div>
+</div>
+<p class="cap">The same analyzer is used for documents and questions.</p>
+
+<h2><span class="ix">4</span>Example: step by step</h2>
+<h3>The BM25 formula (know the parts, not the maths)</h3>
 <pre><code>score(q, d) = Σ over query terms t:
-    IDF(t) · tf(t,d) · (k1 + 1) / ( tf(t,d) + k1 · (1 − b + b · |d| / avgdl) )</code></pre>
+    IDF(t) × tf(t,d) × (k1 + 1) / ( tf(t,d) + k1 × (1 − b + b × |d| / avgdl) )</code></pre>
+<table class="t">
+  <tr><th>Part</th><th>Meaning in simple words</th></tr>
+  <tr><td><b>IDF(t)</b></td><td>inverse document frequency: high for rare words, low for common words like "the"</td></tr>
+  <tr><td><b>tf(t, d)</b></td><td>how many times the word appears in this chunk</td></tr>
+  <tr><td><b>k1 ≈ 1.2</b></td><td>how quickly repetition stops adding score (saturation)</td></tr>
+  <tr><td><b>b ≈ 0.75</b></td><td>how much to adjust for chunk length (0 = ignore length, 1 = full adjustment)</td></tr>
+  <tr><td><b>|d| / avgdl</b></td><td>this chunk's length compared with the average chunk length</td></tr>
+</table>
+<div class="example"><b>Real example: "How do I fix error E-4012?"</b>
+<p>Vector search returns general troubleshooting pages, because "E-4012" has little meaning for an embedding model. BM25 finds the one runbook that contains the exact code "E-4012", because that word is very rare (high IDF). Combining both gives the exact runbook <i>and</i> related explanations.</p></div>
+<h3>How it is used in OpenSearch</h3>
 <ul>
-  <li><b>IDF</b>: rare terms count more ("E-4012" outweighs "the").</li>
-  <li><b>tf saturation (k1 ≈ 1.2)</b>: the 10th repetition of a word adds little.</li>
-  <li><b>Length normalization (b ≈ 0.75)</b>: long chunks don't win just by containing more words.</li>
+  <li><b>text</b> fields are analyzed and scored with BM25; <b>keyword</b> fields are stored exactly, for IDs and filters.</li>
+  <li><b>match</b> = full-text search; <b>match_phrase</b> = words in order; <b>term</b> = exact keyword match.</li>
+  <li>A <b>bool</b> query combines scoring clauses (<code>must</code>, <code>should</code>) with strict <code>filter</code> clauses for access groups and dates.</li>
+  <li><b>Highlighting</b> returns the matching fragment, useful for citation snippets.</li>
 </ul>
 
-<h2><span class="ix">4</span>How it works in OpenSearch</h2>
-<pre><code>"mappings": {
-  "dynamic": "strict",
-  "properties": {
-    "chunk_id":         { "type": "keyword" },
-    "document_id":      { "type": "keyword" },
-    "text_content":     { "type": "text", "analyzer": "english" },
-    "filename":         { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-    "section_path":     { "type": "text", "fields": { "raw": { "type": "keyword" } } },
-    "page_start":       { "type": "integer" }
-  }
-}</code></pre>
-<ul>
-  <li><b>match</b>: analyzed full-text search, scored by BM25. <b>match_phrase</b>: words in order. <b>term</b>: exact match on keyword fields.</li>
-  <li><b>bool</b> query: <code>must</code> or <code>should</code> for scoring, <code>filter</code> for non-scoring constraints (access groups, document IDs, dates).</li>
-  <li><b>Field boosts</b>: e.g. <code>title^2</code>. <b>Highlighting</b> returns the matching fragment, which is useful for citation snippets.</li>
-</ul>
-
-<h3>Learned sparse retrieval</h3>
-<p>Models such as <b>SPLADE</b> and BGE-M3's sparse output produce term weights, including related terms that are absent from the text. They keep the inverted-index speed and add some semantic matching. They are a middle ground between BM25 and dense vectors.</p>
-
-<h2><span class="ix">5</span>In the real world</h2>
-<div class="cards">
-  <div class="card"><h4>BM25 wins</h4><ul><li>IDs, codes, numbers, names</li><li>rare technical terms</li><li>quoted phrases</li><li>brand-new jargon</li></ul></div>
-  <div class="card"><h4>Dense wins</h4><ul><li>paraphrases, synonyms</li><li>natural-language questions</li><li>cross-lingual queries</li><li>vague descriptions</li></ul></div>
+<h2><span class="ix">5</span>Important terms</h2>
+<div class="gloss">
+  <div><b>Lexical search</b><p>Search by matching words. Also called keyword search or sparse search.</p></div>
+  <div><b>Inverted index</b><p>A map from each word to the list of documents that contain it.</p></div>
+  <div><b>Analyzer</b><p>The text-processing chain: split into words → lowercase → stemming → stop words.</p></div>
+  <div><b>Stemming</b><p>Reducing words to a root form: "carried" → "carri".</p></div>
+  <div><b>IDF</b><p>Inverse document frequency: how rare a word is across all documents.</p></div>
+  <div><b>TF-IDF</b><p>Term frequency × IDF. The simpler ancestor of BM25.</p></div>
+  <div><b>Keyword field</b><p>A field stored exactly as it is, for IDs, filters and sorting.</p></div>
+  <div><b>SPLADE</b><p>A learned sparse model that gives weights to words, including related words not in the text.</p></div>
 </div>
-<ul>
-  <li>Choose analyzers per language. Test them with the <code>_analyze</code> API on real text, including Indic scripts.</li>
-  <li>Use <code>dynamic: strict</code> mappings so stray fields don't silently create bad mappings.</li>
-  <li>Disable refresh during bulk indexing (<code>refresh_interval: -1</code>) and re-enable it before validation.</li>
-</ul>
 
-<h2><span class="ix">6</span>Common mistakes</h2>
-<ul>
-  <li>Putting IDs and codes only in analyzed <code>text</code> fields, where they get split and mangled.</li>
-  <li>Using a <code>should</code> clause where a <code>filter</code> is needed, so access rules become "suggestions".</li>
-  <li>Default English analyzers on non-English text.</li>
-  <li>Dropping BM25 because "we have vectors now".</li>
-</ul>
+<h2><span class="ix">6</span>Types and comparison</h2>
+<table class="t">
+  <tr><th></th><th>BM25 (lexical)</th><th>Dense vectors (semantic)</th></tr>
+  <tr><td><b>Wins on</b></td><td>exact IDs, codes, names, numbers, rare terms, quoted phrases</td><td>paraphrases, synonyms, natural questions, other languages</td></tr>
+  <tr><td><b>Fails on</b></td><td>different words with the same meaning</td><td>exact codes, new jargon, rare names</td></tr>
+  <tr><td><b>Needs a model?</b></td><td>no</td><td>yes</td></tr>
+  <tr><td><b>Explainable?</b></td><td>yes — you can see the matched words</td><td>harder</td></tr>
+</table>
+<table class="t">
+  <tr><th></th><th>TF-IDF</th><th>BM25</th></tr>
+  <tr><td><b>Repeated words</b></td><td>keep adding score in a straight line</td><td>stop adding much after a few (saturation, k1)</td></tr>
+  <tr><td><b>Chunk length</b></td><td>weak handling</td><td>normalized (b)</td></tr>
+</table>
 
-<h2><span class="ix">7</span>In our platform</h2>
-<div class="platform"><h4>Where this lives</h4><ul>
-  <li><b>OpenSearch</b> index per generation (e.g. <code>rag_chunks_v042</code>) with explicit mappings: keyword IDs, analyzed <code>text_content</code>, text + keyword <code>filename</code> and <code>section_path</code>, integer pages.</li>
-  <li>Online "Lexical retrieval": BM25 top-k with the same filters as dense search; results recorded in <code>retrieval_results</code> with <code>retrieval_source = bm25</code>.</li>
+<h2><span class="ix">7</span>Advantages and limitations</h2>
+<div class="pc">
+  <div class="pro"><h4>Advantages</h4><ul>
+    <li>Excellent for exact terms, IDs and codes</li>
+    <li>No GPU or model needed</li>
+    <li>Fast, mature and explainable</li>
+    <li>A strong baseline that is hard to beat on some data</li>
+  </ul></div>
+  <div class="con"><h4>Limitations</h4><ul>
+    <li>Misses synonyms and paraphrases</li>
+    <li>Needs a language-specific analyzer</li>
+    <li>Typos can break matches</li>
+    <li>Does not understand meaning or intent</li>
+  </ul></div>
+</div>
+
+<h2><span class="ix">8</span>Where is it used?</h2>
+<div class="uses">
+  <div><b>Hybrid RAG</b>the keyword half of hybrid search</div>
+  <div><b>Error code lookup</b>runbooks and support tickets</div>
+  <div><b>E-commerce search</b>product names and SKUs</div>
+  <div><b>Legal search</b>exact clause numbers and terms</div>
+  <div><b>Log search</b>find exact messages and IDs</div>
+  <div><b>Site search</b>classic search boxes</div>
+</div>
+<div class="platform"><h4>In our platform</h4><ul>
+  <li><b>OpenSearch</b>: one index per generation (for example <code>rag_chunks_v042</code>) with explicit mappings — keyword IDs, analyzed <code>text_content</code>, text + keyword <code>filename</code> and <code>section_path</code>.</li>
+  <li>The online "Lexical retrieval" step runs BM25 top-k with the same filters as the vector search.</li>
 </ul></div>
 
-<h2><span class="ix">8</span>Check yourself</h2>
-<details class="q"><summary>Which query suits BM25 better: "error E-4012" or "why does my app crash at startup"?</summary><div>"error E-4012": an exact rare code that BM25 matches directly. The second is a natural-language question better served by dense search (ideally both, fused).</div></details>
-<details class="q"><summary>What does the b parameter do?</summary><div>It controls length normalization: with b = 1 long documents are fully penalized for their length; with b = 0 length is ignored.</div></details>
-<details class="q"><summary>Why put access groups in a bool <code>filter</code>, not <code>should</code>?</summary><div>A filter is a hard constraint that excludes non-matching documents. <code>should</code> only changes the score, so forbidden documents could still appear.</div></details>
-
-<h2><span class="ix">9</span>Key terms · Go deeper</h2>
-<div class="terms"><span><b>inverted index</b></span><span><b>posting list</b></span><span><b>analyzer</b></span><span><b>stemming</b></span><span><b>IDF</b></span><span><b>BM25 (k1, b)</b></span><span><b>keyword field</b></span><span><b>bool filter</b></span><span><b>SPLADE</b></span></div>
-<ul class="refs">
-  <li>Robertson &amp; Zaragoza — <a href="https://www.staff.city.ac.uk/~sbrp622/papers/foundations_bm25_review.pdf">The Probabilistic Relevance Framework: BM25 and Beyond</a></li>
-  <li>OpenSearch docs — <a href="https://docs.opensearch.org/latest/analyzers/">Text analysis</a> · <a href="https://docs.opensearch.org/latest/query-dsl/">Query DSL</a></li>
-  <li>Formal et al. — <a href="https://arxiv.org/abs/2107.05720">SPLADE</a></li>
-</ul>
+<h2><span class="ix">9</span>How to explain it in an interview</h2>
+<div class="script"><b>Your 1-minute answer</b>
+<p><span class="part">Definition</span>Lexical search, or keyword search, retrieves documents that contain the query words by using an inverted index, which maps each term to the documents where it appears. BM25 is the standard ranking function for it.</p>
+<p><span class="part">How BM25 scores</span>It scores a document higher when query terms appear in it more often, with saturation so repetition helps less and less; when the terms are rare across the collection, using IDF; and it normalizes for document length.</p>
+<p><span class="part">Example</span>For "How do I fix error E-4012?", BM25 finds the exact runbook with that code, while vector search returns general troubleshooting pages.</p>
+<p><span class="part">In practice</span>BM25 is essential for exact identifiers and names, so production RAG combines it with vector search and fuses the results.</p></div>
+<div class="trap">
+  <div class="no"><b>Don't say</b>"Keyword search is outdated now that we have embeddings."</div>
+  <div class="yes"><b>Say instead</b>"BM25 is a strong baseline and essential for exact terms. Production systems combine both."</div>
+  <div class="no"><b>Don't say</b>"We use a should clause for access rules."</div>
+  <div class="yes"><b>Say instead</b>"Access rules go in a filter clause, which strictly excludes documents that don't match."</div>
+</div>
 
 </article></main>
 <script src="assets/path.js"></script>

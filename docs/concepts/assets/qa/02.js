@@ -1,0 +1,42 @@
+// Interview content for lesson 02. def: interview definition · revise: revision card ·
+// qa: questions (l: B basic · I intermediate · A advanced; a: model answer; k: key words; f: likely follow-up).
+window.QA = window.QA || {};
+window.QA["02"] = {
+  def: "A <b>token</b> is the basic unit of text that a language model reads and generates — usually a word, part of a word, a punctuation mark or a space. <b>Tokenization</b> is the process of splitting text into these units using a fixed vocabulary, typically built with algorithms such as Byte-Pair Encoding (BPE), and mapping each unit to a numeric ID. Because models process, limit and price text in tokens, token counts determine context-window usage, cost and latency.",
+  revise: [
+    "In English, one token is about 4 characters or ¾ of a word; many non-English scripts need 2–4× more tokens.",
+    "BPE builds the vocabulary by repeatedly merging the most frequent adjacent pair of symbols.",
+    "Input tokens are processed in parallel (prefill); output tokens are generated one at a time (decode), so long answers dominate latency.",
+    "Embedding models have token limits (for example 512 or 8,192); longer text is silently truncated.",
+    "Always count tokens with the tokenizer of the model in use, and reserve tokens for the answer.",
+  ],
+  qa: [
+    { l: "B", q: "What is a token?",
+      a: "A token is the basic unit of text that a language model processes — typically a whole word, part of a word, a punctuation mark or a word with its leading space. Each token belongs to the model's fixed vocabulary and is represented by a numeric ID. In English, one token corresponds on average to about four characters, or three quarters of a word.",
+      k: ["unit of text", "sub-word", "vocabulary", "token ID", "≈ 4 characters"] },
+    { l: "B", q: "What is tokenization, and why do models use sub-word tokens instead of words?",
+      a: "Tokenization is the process of splitting text into tokens and converting them into numeric IDs that the model can process. Models use sub-word tokens because a vocabulary of whole words would be extremely large and would still fail on new words, names, spelling mistakes and code, while single characters would make sequences very long. Sub-word tokenization balances a manageable vocabulary size with the ability to represent any text.",
+      k: ["text → token IDs", "vocabulary size", "unknown words", "sequence length", "balance"] },
+    { l: "B", q: "Why do token counts matter in an LLM application?",
+      a: "Token counts matter because nearly every limit and cost is measured in tokens. The context window limits the total of input and output tokens, API providers and GPU resources are consumed per token, the number of output tokens largely determines response time, and embedding models truncate text that exceeds their token limit.",
+      k: ["context window", "cost per token", "latency", "truncation"] },
+    { l: "I", q: "Explain Byte-Pair Encoding (BPE).",
+      a: "Byte-Pair Encoding is an algorithm for building a sub-word vocabulary. It starts from individual characters or bytes and repeatedly merges the most frequent adjacent pair into a new token — for example 'l' and 'o' become 'lo', and 'lo' and 'w' become 'low' — until the vocabulary reaches a target size. New text is tokenized by applying the learned merges in the same order. Byte-level BPE can represent any input, so there are no unknown tokens.",
+      k: ["merge most frequent pair", "target vocabulary size", "apply merges in order", "byte-level", "no unknown tokens"] },
+    { l: "I", q: "Why does generating a long answer take longer than processing a long prompt?",
+      a: "Processing the prompt, called the prefill phase, is done in a single parallel pass over all input tokens. Generating the answer, called the decode phase, is sequential: each output token depends on the previous one, so the model must run once per output token. As a result, latency grows mainly with the number of output tokens.",
+      k: ["prefill — parallel", "decode — sequential", "one pass per output token", "output length drives latency"] },
+    { l: "I", q: "Why can the same sentence require more tokens in Tamil or Hindi than in English?",
+      a: "Tokenizers learn their merges from training data that is usually dominated by English, so frequent English words become single tokens while Indic scripts are split into many smaller pieces. The same meaning therefore requires more tokens, which increases cost and latency and leaves less room in the context window. This should be considered when sizing chunks and context budgets for multilingual systems.",
+      k: ["English-dominated training data", "more tokens per word", "cost and latency", "context budget"] },
+    { l: "I", q: "What is a chat template, and why does it matter?",
+      a: "A chat template is the exact text format, including special tokens, that an instruct model was trained on to distinguish roles such as system, user and assistant. If messages are formatted differently from the template, even a strong model may ignore instructions or produce poor output. Serving tools such as Ollama and vLLM read the template from the model files and apply it automatically.",
+      k: ["special tokens", "role markers", "trained format", "applied by the serving engine"] },
+    { l: "A", q: "Chunks are sized at 2,000 characters and the embedding model's limit is 512 tokens. What can go wrong, and how do you fix it?",
+      a: "Many chunks — especially non-English text, tables and code — will exceed 512 tokens and be silently truncated, so the end of each chunk is never embedded and cannot be retrieved. To fix it, I would measure chunk size in tokens using the embedding model's own tokenizer, keep chunks safely below the limit, store the token count for each chunk, and add a validation step that flags oversized chunks during ingestion.",
+      k: ["silent truncation", "measure in tokens", "embedding model's tokenizer", "store token count", "validation"] },
+    { l: "A", q: "How would you budget the context window for a RAG prompt?",
+      a: "I start from the model's context window and subtract the system prompt, the user's question with recent history, and a reserved amount for the answer. The remaining tokens form the budget for retrieved chunks, which I add in ranked order until the budget is reached, keeping a safety margin. For example, with an 8,000-token window: about 400 tokens for instructions, 300 for the question, 800 reserved for the answer, and roughly 3,000–5,000 for context.",
+      k: ["reserve output tokens", "ranked order", "safety margin", "count with the real tokenizer"] },
+  ],
+};

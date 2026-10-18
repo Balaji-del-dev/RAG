@@ -9,128 +9,167 @@
 <body data-lesson="20">
 <main><article class="content">
 
-<h2><span class="ix">1</span>What you will learn</h2>
-<ul>
-  <li>How to build a golden evaluation dataset that reflects real use.</li>
-  <li>Retrieval metrics (hit rate, precision, recall, MRR, nDCG) and generation metrics (faithfulness, relevancy, correctness, citations).</li>
-  <li>How to use an LLM as a judge without fooling yourself.</li>
-  <li>The improvement loop: baseline → one change → compare → gate the release.</li>
-</ul>
+<h2><span class="ix">1</span>What is RAG evaluation?</h2>
+<div class="oneline" data-def><small>Interview answer — say this first</small></div>
+<div class="simple"><b>In simple words</b>
+<p>RAG evaluation means giving the system the <b>same test questions</b> every time you change something, and measuring two things: did it <b>find</b> the right documents, and did it <b>answer</b> correctly from them? Then you compare the scores with the previous version before releasing.</p></div>
 
-<h2><span class="ix">2</span>Why it matters</h2>
-<p>RAG has many settings: parser, chunk size, embedder, k, fusion, reranker, prompt, model. Changing one often helps some questions and hurts others. Without measurement, every change is a guess and regressions reach users unnoticed. <b>Evaluation turns "it feels better" into numbers you can compare.</b></p>
+<h2><span class="ix">2</span>Why do we need it?</h2>
+<p>A RAG system has many settings: parser, chunk size, embedding model, top-k, reranker, prompt, LLM. A change that helps some questions often hurts others. Without measurement, decisions are based on "it looks better", and problems reach users unnoticed.</p>
+<div class="pc">
+  <div class="con"><h4>Without evaluation</h4><ul>
+    <li>"We tried a few questions and it looked fine"</li>
+    <li>No idea which change broke what</li>
+    <li>Regressions found by users</li>
+  </ul></div>
+  <div class="pro"><h4>With evaluation</h4><ul>
+    <li>Fixed test set, numbers for every change</li>
+    <li>Retrieval and generation measured separately</li>
+    <li>Release only when the scores pass</li>
+  </ul></div>
+</div>
+<div class="analogy"><b>Analogy: an exam with an answer key</b>
+<p>You can't know whether a student improved without giving the same exam before and after. A <b>golden dataset</b> is that exam: questions with known correct sources and answers. After every change the system takes the exam again, and you compare the marks — per question, not just the total.</p></div>
 
-<h2><span class="ix">3</span>Core ideas</h2>
-<h3>The golden dataset</h3>
-<ul>
-  <li><b>Questions</b>: real user questions where possible; synthetic questions generated from chunks to fill gaps.</li>
-  <li><b>Expected sources</b>: document + page or section (these survive re-chunking better than chunk IDs). Optionally an <b>expected answer</b>.</li>
-  <li><b>Case types</b>: factoid, multi-part, table lookup, ID or keyword lookup, multilingual, <b>unanswerable</b> (should abstain), adversarial (injection, off-topic).</li>
-  <li><b>Size</b>: start with 50–200 reviewed cases; grow it from production feedback. <b>Version and freeze</b> each dataset.</li>
-</ul>
+<h2><span class="ix">3</span>How does it work?</h2>
+<div class="stepcards">
+  <div class="sc"><span class="num">1</span><div><h4>Build a golden dataset</h4>
+    <p>Collect realistic questions with their expected sources (document + page) and, where possible, expected answers. Include hard cases: tables, IDs, multi-part questions, other languages, and questions the documents <b>cannot</b> answer.</p></div></div>
+  <div class="sc"><span class="num">2</span><div><h4>Run the current system to get a baseline</h4>
+    <p>Run every question and save the results and scores.</p></div></div>
+  <div class="sc"><span class="num">3</span><div><h4>Measure retrieval</h4>
+    <p>Did the expected chunks appear in the top k? Use recall@k, MRR and nDCG.</p></div></div>
+  <div class="sc"><span class="num">4</span><div><h4>Measure generation</h4>
+    <p>Is every claim supported by the context (faithfulness)? Does the answer address the question (relevancy)? Are citations correct? Did it abstain when it should?</p></div></div>
+  <div class="sc"><span class="num">5</span><div><h4>Make one change, compare, decide</h4>
+    <p>Change one thing, run again, compare per metric <b>and per question</b>, and inspect the cases that got worse. Release only if the agreed thresholds pass.</p></div></div>
+</div>
+<div class="pic">
+  <div class="chain">
+    <div class="c d">Golden dataset<small>questions + expected sources</small></div>
+    <div class="c">Run pipeline</div>
+    <div class="c a">Retrieval metrics<small>recall@k · MRR · nDCG</small></div>
+    <div class="c c3">Generation metrics<small>faithfulness · relevancy · citations</small></div>
+    <div class="c b">Compare with baseline<small>→ release gate</small></div>
+  </div>
+</div>
+<p class="cap">Draw the loop: dataset → run → two groups of metrics → compare → decide.</p>
 
-<h3>Retrieval metrics (did we find the evidence?)</h3>
+<h2><span class="ix">4</span>Example: step by step</h2>
+<h3>Retrieval metrics</h3>
 <table class="t">
   <tr><th>Metric</th><th>Question it answers</th></tr>
   <tr><td><b>Hit rate@k</b></td><td>Is at least one relevant chunk in the top k?</td></tr>
-  <tr><td><b>Recall@k</b></td><td>What share of all relevant chunks are in the top k?</td></tr>
+  <tr><td><b>Recall@k</b></td><td>What share of all relevant chunks is in the top k?</td></tr>
   <tr><td><b>Precision@k</b></td><td>What share of the top k is relevant?</td></tr>
-  <tr><td><b>MRR</b></td><td>How high is the first relevant result? (1 / rank, averaged)</td></tr>
-  <tr><td><b>nDCG@k</b></td><td>Are relevant results near the top? (graded, position-weighted)</td></tr>
+  <tr><td><b>MRR</b></td><td>How high is the first relevant result? (average of 1 ÷ rank)</td></tr>
+  <tr><td><b>nDCG@k</b></td><td>Are the relevant results near the top? (position-weighted)</td></tr>
 </table>
-
+<div class="example"><b>Worked example</b>
+<p>3 chunks are relevant. The top 5 results are: not relevant, <b>relevant</b>, not relevant, <b>relevant</b>, not relevant. So hit@5 = 1, recall@5 = 2 ÷ 3 = 0.67, precision@5 = 2 ÷ 5 = 0.40, and MRR = 1 ÷ 2 = 0.50 (the first relevant result is at rank 2).</p></div>
 <div class="demo">
-  <h4>Try it: retrieval metrics for one query</h4>
-  <div class="hint">Relevance of the top results in order (1 = relevant, 0 = not) and how many relevant chunks exist in total.</div>
+  <h4>Try it: retrieval metrics for one question</h4>
+  <div class="hint">Relevance of the ranked results (1 = relevant, 0 = not), the total number of relevant chunks, and k.</div>
   <label>ranked relevance <input type="text" id="rel" value="0, 1, 0, 1, 0, 0, 0, 0, 0, 0" size="30"></label>
   <label>total relevant <input type="number" id="R" value="3" min="1" max="50"></label>
   <label>k <input type="number" id="kk" value="5" min="1" max="50"></label>
   <div class="out" id="m"></div>
 </div>
-
-<h3>Generation metrics (did we use it well?)</h3>
+<h3>Generation metrics</h3>
 <table class="t">
   <tr><th>Metric</th><th>Meaning</th></tr>
-  <tr><td><b>Faithfulness / groundedness</b></td><td>Are the answer's claims supported by the retrieved context?</td></tr>
-  <tr><td><b>Answer relevancy</b></td><td>Does it address the question?</td></tr>
-  <tr><td><b>Answer correctness</b></td><td>Does it match the expected answer (when you have one)?</td></tr>
-  <tr><td><b>Context precision / recall</b></td><td>Was the context relevant, and did it contain what was needed?</td></tr>
-  <tr><td><b>Citation precision / coverage</b></td><td>Do citations support their sentences? Is every claim cited?</td></tr>
-  <tr><td><b>Abstention accuracy</b></td><td>Abstains on unanswerable cases, answers the answerable ones.</td></tr>
-  <tr><td><b>Latency, tokens, failures</b></td><td>p50/p95 per stage, token usage, errors and timeouts.</td></tr>
+  <tr><td><b>Faithfulness</b> (groundedness)</td><td>share of claims supported by the retrieved context</td></tr>
+  <tr><td><b>Answer relevancy</b></td><td>does the answer address the question?</td></tr>
+  <tr><td><b>Answer correctness</b></td><td>does it match the expected answer?</td></tr>
+  <tr><td><b>Context precision / recall</b></td><td>was the context relevant, and did it contain what was needed?</td></tr>
+  <tr><td><b>Citation precision / coverage</b></td><td>do citations support their sentences, and is every claim cited?</td></tr>
+  <tr><td><b>Abstention accuracy</b></td><td>abstains on unanswerable questions, answers answerable ones</td></tr>
 </table>
+<div class="example"><b>Real example: reading the numbers</b>
+<p>After a change, recall@10 stays at 0.92 but faithfulness drops from 0.95 to 0.86. Retrieval is fine; <b>generation</b> got worse — probably the new prompt or model. The team reverts the prompt change and investigates the 14 questions that got worse.</p></div>
 
-<h2><span class="ix">4</span>How it works</h2>
-<h3>LLM-as-a-judge</h3>
-<ul>
-  <li>An LLM scores answers against a <b>rubric</b>: "Is every claim supported by the context? Answer yes or no, with reasons."</li>
-  <li><b>Known biases</b>: preferring the first option (position), longer answers (verbosity) and its own style (self-preference).</li>
-  <li><b>Calibrate</b>: label 50–100 cases by hand and measure agreement with the judge before trusting it. Fix the judge model, version, prompt and temperature (0).</li>
-  <li>Prefer simple binary or 3-point judgments over 1–10 scales; they are more consistent.</li>
-</ul>
+<h2><span class="ix">5</span>Important terms</h2>
+<div class="gloss">
+  <div><b>Golden dataset</b><p>A reviewed set of test questions with expected sources and answers. Versioned and fixed.</p></div>
+  <div><b>Baseline</b><p>The current system's scores, used for comparison.</p></div>
+  <div><b>Recall@k</b><p>The share of all relevant chunks that appear in the top k results.</p></div>
+  <div><b>MRR</b><p>Mean Reciprocal Rank: the average of 1 ÷ (rank of the first relevant result).</p></div>
+  <div><b>Faithfulness</b><p>The share of claims in the answer that the retrieved context supports.</p></div>
+  <div><b>LLM-as-a-judge</b><p>Using an LLM to grade answers against a rubric. Must be checked against human labels.</p></div>
+  <div><b>Regression</b><p>A question that got worse after a change.</p></div>
+  <div><b>RAGAS / DeepEval</b><p>Open-source libraries that compute RAG metrics.</p></div>
+</div>
 
-<h3>The improvement loop</h3>
-<ol class="steps">
-  <li><b>Baseline</b>: run the current published pipeline on the dataset and store the results.</li>
-  <li><b>One change</b>: a new chunk size, model or prompt — a new candidate pipeline version.</li>
-  <li><b>Run and compare</b>: per metric <i>and</i> per case. Look at regressions, not just averages.</li>
-  <li><b>Gate</b>: acceptance criteria (no critical metric below threshold, no regression beyond tolerance on any case type, latency budget met).</li>
-  <li><b>Release</b> after review; keep monitoring production with sampled checks and feedback.</li>
-</ol>
+<h2><span class="ix">6</span>Types and comparison</h2>
+<table class="t">
+  <tr><th></th><th>Offline evaluation</th><th>Online evaluation</th></tr>
+  <tr><td><b>Data</b></td><td>golden dataset</td><td>real user traffic</td></tr>
+  <tr><td><b>When</b></td><td>before every release</td><td>continuously after release</td></tr>
+  <tr><td><b>Signals</b></td><td>metrics vs baseline</td><td>feedback, sampled reviews, latency, abstention rate</td></tr>
+</table>
+<table class="t">
+  <tr><th></th><th>Human evaluation</th><th>LLM-as-a-judge</th></tr>
+  <tr><td><b>Quality</b></td><td>the reference standard</td><td>good when calibrated</td></tr>
+  <tr><td><b>Cost and speed</b></td><td>slow, expensive</td><td>fast, cheap</td></tr>
+  <tr><td><b>Known biases</b></td><td>fatigue, inconsistency</td><td>prefers the first option, longer answers, its own style</td></tr>
+</table>
+<div class="remember"><b>Remember — measure the two halves separately</b>
+<p>Low recall → fix retrieval (parsing, chunking, embeddings, query). High recall but low faithfulness → fix generation (context, prompt, model). This tells you which half to work on.</p></div>
 
-<h2><span class="ix">5</span>In the real world</h2>
-<ul>
-  <li><b>Evaluate retrieval separately from generation.</b> It tells you which half to fix (lesson 08).</li>
-  <li>Small datasets are noisy. A 2-point change on 60 questions may be chance — inspect the changed cases.</li>
-  <li>Keep <b>unanswerable cases</b>: they catch systems that always answer.</li>
-  <li>Tools: <b>DeepEval</b> (pytest-style metrics), <b>RAGAS</b>, TruLens. All can use a local judge model. Retrieval metrics are simple to compute yourself.</li>
-  <li>Add every production failure you fix as a new test case. The dataset becomes your regression suite.</li>
-</ul>
+<h2><span class="ix">7</span>Advantages and limitations</h2>
+<div class="pc">
+  <div class="pro"><h4>Advantages</h4><ul>
+    <li>Decisions based on numbers, not impressions</li>
+    <li>Catches regressions before users do</li>
+    <li>Shows which part of the system to fix</li>
+    <li>Makes model and prompt upgrades safe</li>
+  </ul></div>
+  <div class="con"><h4>Limitations</h4><ul>
+    <li>Building a good dataset takes expert time</li>
+    <li>Small datasets give noisy results</li>
+    <li>LLM judges have biases and need calibration</li>
+    <li>Offline scores don't capture everything users feel</li>
+  </ul></div>
+</div>
 
-<h2><span class="ix">6</span>Common mistakes</h2>
-<ul>
-  <li>Judging changes by trying a few questions by hand.</li>
-  <li>Only measuring the final answer, so you can't tell retrieval failures from generation failures.</li>
-  <li>Trusting an uncalibrated small judge model.</li>
-  <li>Changing three settings at once.</li>
-  <li>Evaluation cases leaking into fine-tuning data (lesson 26).</li>
-</ul>
-
-<h2><span class="ix">7</span>In our platform</h2>
-<div class="platform"><h4>Where this lives</h4><ul>
-  <li><code>evaluation_datasets</code> (versioned), <code>evaluation_cases</code> (question, expected answer, <code>expected_sources</code>, <code>case_type</code>), <code>evaluation_runs</code> (pipeline version + index generation), <code>evaluation_results</code> (per case, per metric).</li>
-  <li>Runs execute as Celery <code>evaluation</code> tasks with DeepEval and a local judge; dashboards in React; release needs manual approval (audited).</li>
+<h2><span class="ix">8</span>Where is it used?</h2>
+<div class="uses">
+  <div><b>Before every release</b>a release gate with thresholds</div>
+  <div><b>Choosing models</b>compare embedding models or LLMs</div>
+  <div><b>Tuning chunking</b>compare chunk sizes on recall@k</div>
+  <div><b>Prompt changes</b>check faithfulness and citations</div>
+  <div><b>Production monitoring</b>sampled reviews and feedback</div>
+  <div><b>Audits</b>prove quality to stakeholders</div>
+</div>
+<div class="platform"><h4>In our platform</h4><ul>
+  <li>Tables: <code>evaluation_datasets</code>, <code>evaluation_cases</code>, <code>evaluation_runs</code> and <code>evaluation_results</code>.</li>
+  <li>Runs execute as Celery evaluation tasks with DeepEval and a local judge model; release needs an audited manual approval.</li>
   <li>See the <a href="../images/06-evaluation-loop.png">evaluation loop diagram</a>.</li>
 </ul></div>
 
-<h2><span class="ix">8</span>Check yourself</h2>
-<details class="q"><summary>Recall@10 is high but faithfulness is low. Where is the problem?</summary><div>Generation: the evidence is retrieved, but the model doesn't stick to it — a prompt, context-assembly or model issue.</div></details>
-<details class="q"><summary>Why include unanswerable questions in the dataset?</summary><div>To measure whether the system abstains correctly instead of inventing answers.</div></details>
-<details class="q"><summary>How do you know whether to trust an LLM judge?</summary><div>Compare its judgments with human labels on a sample and measure agreement. Keep the judge version and prompt fixed across compared runs.</div></details>
-
-<h2><span class="ix">9</span>Key terms · Go deeper</h2>
-<div class="terms"><span><b>golden dataset</b></span><span><b>recall@k</b></span><span><b>MRR</b></span><span><b>nDCG</b></span><span><b>faithfulness</b></span><span><b>answer relevancy</b></span><span><b>LLM-as-a-judge</b></span><span><b>regression gate</b></span></div>
-<ul class="refs">
-  <li>Es et al. — <a href="https://arxiv.org/abs/2309.15217">RAGAS: Automated Evaluation of RAG</a> · <a href="https://docs.ragas.io/">RAGAS docs</a></li>
-  <li><a href="https://deepeval.com/docs/getting-started">DeepEval documentation</a></li>
-  <li>Zheng et al. — <a href="https://arxiv.org/abs/2306.05685">Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena</a></li>
-</ul>
+<h2><span class="ix">9</span>How to explain it in an interview</h2>
+<div class="script"><b>Your 1-minute answer</b>
+<p><span class="part">Definition</span>RAG evaluation is the systematic measurement of how well a retrieval-augmented system finds the right evidence and uses it to produce correct answers.</p>
+<p><span class="part">How</span>I use a versioned golden dataset of questions with expected sources and answers, including unanswerable questions. I measure retrieval with recall@k, MRR and nDCG, and generation with faithfulness, answer relevancy, citation accuracy and abstention accuracy.</p>
+<p><span class="part">Example</span>If recall stays at 0.92 but faithfulness drops from 0.95 to 0.86 after a prompt change, retrieval is fine and the prompt is the problem.</p>
+<p><span class="part">Process</span>Every change is compared with the baseline per metric and per question, regressions are inspected, and a release gate with predefined thresholds decides. LLM judges are calibrated against human labels.</p></div>
+<div class="trap">
+  <div class="no"><b>Don't say</b>"We test by asking a few questions and checking if the answers look good."</div>
+  <div class="yes"><b>Say instead</b>"We use a versioned golden dataset and compare retrieval and generation metrics with a baseline."</div>
+  <div class="no"><b>Don't say</b>"An LLM judge is always reliable."</div>
+  <div class="yes"><b>Say instead</b>"We calibrate the judge against human labels and keep its model and prompt fixed."</div>
+</div>
 
 <script>
 (function () {
   function run() {
     const rel = document.getElementById("rel").value.split(",").map((x) => (+x.trim() > 0 ? 1 : 0));
-    const R = Math.max(1, +document.getElementById("R").value || 1);
-    const k = Math.max(1, +document.getElementById("kk").value || 1);
-    const top = rel.slice(0, k);
-    const hits = top.reduce((a, b) => a + b, 0);
-    const first = rel.indexOf(1);
+    const R = Math.max(1, +document.getElementById("R").value || 1), k = Math.max(1, +document.getElementById("kk").value || 1);
+    const top = rel.slice(0, k), hits = top.reduce((a, b) => a + b, 0), first = rel.indexOf(1);
     const dcg = top.reduce((a, r, i) => a + r / Math.log2(i + 2), 0);
     const ideal = Array.from({ length: Math.min(R, k) }, (_, i) => 1 / Math.log2(i + 2)).reduce((a, b) => a + b, 0);
     const f = (x) => x.toFixed(3);
-    document.getElementById("m").innerHTML =
-      `hit@${k} = <b>${hits > 0 ? 1 : 0}</b> · precision@${k} = <b>${f(hits / k)}</b> · recall@${k} = <b>${f(Math.min(1, hits / R))}</b> · ` +
-      `MRR = <b>${first >= 0 ? f(1 / (first + 1)) : "0.000"}</b> · nDCG@${k} = <b>${f(ideal ? dcg / ideal : 0)}</b>`;
+    document.getElementById("m").innerHTML = `hit@${k} = <b>${hits > 0 ? 1 : 0}</b> · precision@${k} = <b>${f(hits / k)}</b> · recall@${k} = <b>${f(Math.min(1, hits / R))}</b> · MRR = <b>${first >= 0 ? f(1 / (first + 1)) : "0.000"}</b> · nDCG@${k} = <b>${f(ideal ? dcg / ideal : 0)}</b>`;
   }
   ["rel", "R", "kk"].forEach((id) => document.getElementById(id).addEventListener("input", run));
   run();

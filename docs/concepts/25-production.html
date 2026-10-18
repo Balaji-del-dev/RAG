@@ -3,99 +3,169 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Production engineering</title>
+<title>Production: latency, cost, scale</title>
 <link rel="stylesheet" href="assets/concepts.css">
 </head>
 <body data-lesson="25">
 <main><article class="content">
 
-<h2><span class="ix">1</span>What you will learn</h2>
-<ul>
-  <li>How to set and spend a latency budget across the RAG pipeline.</li>
-  <li>Caching at every level: embeddings, retrieval, answers and the KV prefix.</li>
-  <li>Reliable async work: queues, idempotency, retries, outbox and reconciliation.</li>
-  <li>Index versioning, scaling, graceful degradation, backups and cost control.</li>
-</ul>
+<h2><span class="ix">1</span>What does "production-ready RAG" mean?</h2>
+<div class="oneline" data-def><small>Interview answer — say this first</small></div>
+<div class="simple"><b>In simple words</b>
+<p>A demo answers one question nicely. A production system answers thousands of questions a day — during deployments, model upgrades and partial outages — <b>fast, reliably and at a controlled cost</b>. Production engineering is the set of techniques that make this possible: latency budgets, caching, reliable background jobs, safe index updates, scaling and fallbacks.</p></div>
 
-<h2><span class="ix">2</span>Why it matters</h2>
-<p>A demo answers one question nicely; production answers thousands a day, during deployments, model upgrades and partial outages. The difference is engineering: <b>predictable latency, no lost work, safe changes and controlled cost</b>.</p>
+<h2><span class="ix">2</span>Why do we need it?</h2>
+<div class="pc">
+  <div class="con"><h4>Demo-quality system</h4><ul>
+    <li>Sometimes takes 15 seconds</li>
+    <li>A crash loses uploaded documents</li>
+    <li>Re-indexing breaks search for an hour</li>
+    <li>One slow service hangs everything</li>
+    <li>GPU bill grows without control</li>
+  </ul></div>
+  <div class="pro"><h4>Production system</h4><ul>
+    <li>p95 under a target, e.g. 4 seconds</li>
+    <li>No lost work: durable, retried jobs</li>
+    <li>New index built alongside, switched in one step</li>
+    <li>Timeouts and graceful fallbacks</li>
+    <li>Caching, right-sized models, cost tracking</li>
+  </ul></div>
+</div>
 
-<h2><span class="ix">3</span>Core ideas</h2>
-<h3>A latency budget (example: p95 ≤ 4 s)</h3>
+<h2><span class="ix">3</span>How does it work?</h2>
+<div class="stepcards">
+  <div class="sc"><span class="num">1</span><div><h4>Set a latency budget</h4>
+    <p>Decide the total target (e.g. p95 ≤ 4 s) and give each step its share. Run independent steps in parallel, such as vector and BM25 search.</p></div></div>
+  <div class="sc"><span class="num">2</span><div><h4>Cache at every level</h4>
+    <p>Embedding cache, retrieval cache, answer (semantic) cache and the LLM's prefix cache — each with the right key and expiry.</p></div></div>
+  <div class="sc"><span class="num">3</span><div><h4>Make background work reliable</h4>
+    <p>Write the job and an <b>outbox</b> row in one database transaction; make tasks <b>idempotent</b> (safe to run twice); retry with backoff; and regularly <b>reconcile</b> the database with the indexes.</p></div></div>
+  <div class="sc"><span class="num">4</span><div><h4>Update indexes safely (blue-green)</h4>
+    <p>Build a new index generation next to the live one, validate it, switch with one database commit, and keep the old one for rollback.</p></div></div>
+  <div class="sc"><span class="num">5</span><div><h4>Scale and degrade gracefully</h4>
+    <p>Scale stateless API workers horizontally; plan GPUs from concurrency × context length. Put timeouts on every call, and fall back (e.g. BM25-only) when a service is down.</p></div></div>
+  <div class="sc"><span class="num">6</span><div><h4>Control cost</h4>
+    <p>Cost is mostly GPU time: use smaller or quantized models where evaluation allows, batching, caching, shorter prompts, and route simple questions to cheaper paths.</p></div></div>
+</div>
+<div class="pic">
+  <h4>Reliable background work (transactional outbox)</h4>
+  <div class="chain">
+    <div class="c">Upload request</div>
+    <div class="c b">One DB transaction<small>job row + outbox row</small></div>
+    <div class="c d">Outbox dispatcher<small>reads pending rows</small></div>
+    <div class="c">Redis queue</div>
+    <div class="c a">Celery worker<small>idempotent, retried</small></div>
+  </div>
+  <h4>Blue-green index publication</h4>
+  <div class="chain">
+    <div class="c b">Live generation G41</div>
+    <div class="c">Build G42 alongside</div>
+    <div class="c d">Validate G42<small>counts + evaluation</small></div>
+    <div class="c a">Switch in one commit</div>
+    <div class="c">Keep G41 for rollback</div>
+  </div>
+</div>
+<p class="cap">Work is never lost, and users never see a half-built index.</p>
+
+<h2><span class="ix">4</span>Example: step by step</h2>
+<h3>A latency budget (target: p95 ≤ 4 s)</h3>
 <table class="t">
-  <tr><th>Step</th><th>Budget</th><th>Levers</th></tr>
+  <tr><th>Step</th><th>Budget</th><th>How to stay within it</th></tr>
   <tr><td>validation, classification</td><td>20 ms</td><td>rules first; small models</td></tr>
   <tr><td>query embedding</td><td>30 ms</td><td>GPU or small model; cache</td></tr>
-  <tr><td>dense ∥ BM25 search</td><td>60 ms</td><td>run in parallel; payload indexes; ef</td></tr>
-  <tr><td>fusion + rerank</td><td>200 ms</td><td>candidate count; GPU batch</td></tr>
+  <tr><td>vector ∥ BM25 search</td><td>60 ms</td><td>run in parallel; payload indexes; tune ef</td></tr>
+  <tr><td>fusion + rerank</td><td>200 ms</td><td>limit candidates; GPU batch</td></tr>
   <tr><td>LLM: time to first token</td><td>≤ 700 ms</td><td>shorter prompts; prefix caching; right model size</td></tr>
   <tr><td>LLM: streaming the answer</td><td>~2.5 s</td><td>max_tokens; concise output; faster model</td></tr>
   <tr><td>validation</td><td>100 ms</td><td>deterministic checks first</td></tr>
 </table>
+<div class="remember"><b>Remember</b>
+<p>The LLM is usually most of the time. Streaming makes the answer <b>feel</b> fast, because the user sees text after the first ~0.7 seconds.</p></div>
+<h3>The four caches</h3>
+<table class="t">
+  <tr><th>Cache</th><th>Key</th><th>Watch out</th></tr>
+  <tr><td><b>Embedding cache</b></td><td>content hash + model version</td><td>unchanged chunks are never re-embedded</td></tr>
+  <tr><td><b>Retrieval cache</b></td><td>normalized query + filters + index generation</td><td>short expiry; clear on publish</td></tr>
+  <tr><td><b>Answer / semantic cache</b></td><td>similar question + <b>user access scope</b> + generation</td><td>without the access scope, it can leak data to the wrong user</td></tr>
+  <tr><td><b>Prefix (KV) cache</b></td><td>shared prompt prefix (inside vLLM)</td><td>keep stable instructions at the start of the prompt</td></tr>
+</table>
 
-<h3>Caching</h3>
-<div class="cards">
-  <div class="card"><h4>Embedding cache</h4><p>Key = content hash + model version. Unchanged chunks are never re-embedded.</p></div>
-  <div class="card"><h4>Query / retrieval cache</h4><p>Key = normalized query + filters + index generation. Short TTL; invalidate on publish.</p></div>
-  <div class="card"><h4>Answer / semantic cache</h4><p>Reuse answers for near-identical questions. Must include the user's access scope and generation in the key — otherwise it leaks or goes stale.</p></div>
-  <div class="card"><h4>Prefix (KV) cache</h4><p>vLLM and others reuse computation for a shared prompt prefix. Keep stable instructions at the start of the prompt.</p></div>
+<h2><span class="ix">5</span>Important terms</h2>
+<div class="gloss">
+  <div><b>Latency budget</b><p>The total time target split across the steps of a request.</p></div>
+  <div><b>Semantic cache</b><p>Reuses an answer for a question with very similar meaning.</p></div>
+  <div><b>Transactional outbox</b><p>Save the work and a "message to send" in one transaction, and send it afterwards, so no work is lost.</p></div>
+  <div><b>Idempotent task</b><p>A task that gives the same result if it runs twice, so retries are safe.</p></div>
+  <div><b>Reconciliation</b><p>A regular job that compares the database with the indexes and fixes differences.</p></div>
+  <div><b>Blue-green deployment</b><p>Build the new version next to the old one, then switch in one step, with easy rollback.</p></div>
+  <div><b>Circuit breaker</b><p>Stops calling a failing service for a while, so it doesn't slow everything down.</p></div>
+  <div><b>Backpressure</b><p>Limits and priorities on queues so a bulk upload doesn't block interactive work.</p></div>
 </div>
 
-<h2><span class="ix">4</span>How it works: reliable background work</h2>
-<ol class="steps">
-  <li><b>Durable intent</b>: write the job and an outbox row in one database transaction. Dispatch afterwards — see architecture diagram 02.</li>
-  <li><b>Idempotent tasks</b>: deterministic IDs and upserts, so running a task twice is harmless.</li>
-  <li><b>Retries with backoff</b> for transient errors; dead-letter after N attempts, with the error kept.</li>
-  <li><b>Reconciliation</b>: periodically compare PostgreSQL with Qdrant and OpenSearch (counts, missing or orphaned IDs) and repair the drift.</li>
-  <li><b>Backpressure</b>: queue limits and priorities, so a bulk upload doesn't starve interactive work.</li>
-</ol>
+<h2><span class="ix">6</span>Types and comparison</h2>
+<h3>Graceful degradation</h3>
+<table class="t">
+  <tr><th>If this fails…</th><th>Fallback</th></tr>
+  <tr><td>Vector database</td><td>answer from BM25 results only, marked as degraded</td></tr>
+  <tr><td>Reranker times out</td><td>use the fused order without reranking</td></tr>
+  <tr><td>LLM unavailable</td><td>show the top sources with a message, or abstain</td></tr>
+  <tr><td>Ingestion workers down</td><td>uploads still accepted; jobs wait safely in the outbox</td></tr>
+</table>
+<h3>Ways to reduce cost</h3>
+<table class="t">
+  <tr><th>Lever</th><th>Effect</th></tr>
+  <tr><td>Smaller or quantized model</td><td>less GPU memory and time — only if evaluation allows</td></tr>
+  <tr><td>Caching</td><td>repeated questions cost almost nothing</td></tr>
+  <tr><td>Shorter prompts (fewer, better chunks)</td><td>faster and cheaper per question</td></tr>
+  <tr><td>Batching (continuous batching in vLLM)</td><td>more users per GPU</td></tr>
+  <tr><td>Routing</td><td>simple questions take a cheaper path</td></tr>
+</table>
 
-<h3>Index versioning (blue-green)</h3>
-<p>Build a new index generation next to the live one, validate it, switch with one database commit, and keep the old one for rollback. Users never see a half-built index (architecture diagram 02).</p>
+<h2><span class="ix">7</span>Advantages and limitations</h2>
+<div class="pc">
+  <div class="pro"><h4>Advantages</h4><ul>
+    <li>Predictable speed for users</li>
+    <li>No lost work after crashes</li>
+    <li>Safe, reversible index and model changes</li>
+    <li>Controlled cost</li>
+  </ul></div>
+  <div class="con"><h4>Trade-offs</h4><ul>
+    <li>More moving parts to build and operate</li>
+    <li>Caches can serve stale or wrong-scope answers if keys are wrong</li>
+    <li>Blue-green needs double index storage for a while</li>
+    <li>Fallbacks give lower-quality answers</li>
+  </ul></div>
+</div>
+<div class="remember"><b>Remember — common production mistakes</b>
+<p>No timeouts; answer caches that ignore user permissions; sending tasks before the database commit; rebuilding the live index in place; never testing a restore from backup.</p></div>
 
-<h3>Scaling and degradation</h3>
-<ul>
-  <li><b>Stateless API workers</b> scale horizontally; GPU capacity is planned from concurrency × context length (lessons 04, 06).</li>
-  <li>Connection pooling for PostgreSQL (e.g. PgBouncer); replicas for the search engines when needed.</li>
-  <li><b>Timeouts on every call</b> and circuit breakers. Degrade gracefully: BM25-only if the vector DB is down, skip the reranker if it times out, abstain if the LLM is unavailable.</li>
-</ul>
-
-<h2><span class="ix">5</span>In the real world</h2>
-<ul>
-  <li><b>Cost</b> is mostly GPU time. Levers: smaller models where evaluation allows, quantization, batching, caching, shorter prompts, and routing simple questions to cheaper paths.</li>
-  <li><b>Backups</b>: point-in-time recovery for PostgreSQL and versioned object storage. Search indexes can be rebuilt, but measure how long a rebuild takes.</li>
-  <li><b>Safe changes</b>: immutable configuration versions, evaluation gates, staged rollout and quick rollback.</li>
-  <li><b>Capacity tests</b>: load-test with realistic prompt lengths and concurrency before launch.</li>
-</ul>
-
-<h2><span class="ix">6</span>Common mistakes</h2>
-<ul>
-  <li>No timeouts, so one slow dependency hangs every request.</li>
-  <li>Answer caches that ignore user permissions or index generation.</li>
-  <li>Dispatching tasks before the database commit, losing work on a crash.</li>
-  <li>Rebuilding the live index in place.</li>
-  <li>Never testing restore from backup.</li>
-</ul>
-
-<h2><span class="ix">7</span>In our platform</h2>
-<div class="platform"><h4>Where this lives</h4><ul>
+<h2><span class="ix">8</span>Where is it used?</h2>
+<div class="uses">
+  <div><b>Enterprise assistants</b>thousands of employees, steady latency</div>
+  <div><b>Customer support at scale</b>peaks during sales or outages</div>
+  <div><b>Bulk ingestion</b>migrating millions of documents</div>
+  <div><b>Model upgrades</b>switch embedders without downtime</div>
+  <div><b>Cost-sensitive products</b>per-question cost targets</div>
+  <div><b>Regulated systems</b>backups, restore tests, audit</div>
+</div>
+<div class="platform"><h4>In our platform</h4><ul>
   <li><code>outbox_events</code> + dispatcher → Redis → Celery (idempotent tasks, retries, Flower monitoring); <code>processing_jobs</code> and <code>index_build_jobs</code> track attempts.</li>
   <li><code>index_generations</code> + <code>index_validations</code> for blue-green publication and rollback; reconciliation repairs <code>index_memberships</code> drift.</li>
   <li>Immutable <code>pipeline_versions</code>; release gated by the evaluation loop; <code>audit_events</code> for changes.</li>
 </ul></div>
 
-<h2><span class="ix">8</span>Check yourself</h2>
-<details class="q"><summary>Why must an answer-cache key include the user's access scope?</summary><div>Otherwise an answer built from documents one user may see can be served to another user who may not.</div></details>
-<details class="q"><summary>What does reconciliation protect against?</summary><div>Drift between the system of record and derived indexes after partial failures — missing, duplicate or orphaned records.</div></details>
-<details class="q"><summary>The vector database is down. What is a graceful fallback?</summary><div>Answer from BM25 results only (marked as degraded) or abstain, instead of failing every request.</div></details>
-
-<h2><span class="ix">9</span>Key terms · Go deeper</h2>
-<div class="terms"><span><b>latency budget</b></span><span><b>semantic cache</b></span><span><b>prefix caching</b></span><span><b>idempotency</b></span><span><b>outbox</b></span><span><b>reconciliation</b></span><span><b>blue-green</b></span><span><b>circuit breaker</b></span><span><b>backpressure</b></span></div>
-<ul class="refs">
-  <li><a href="https://docs.vllm.ai/en/latest/features/automatic_prefix_caching.html">vLLM — automatic prefix caching</a></li>
-  <li><a href="https://microservices.io/patterns/data/transactional-outbox.html">Transactional outbox pattern</a></li>
-  <li>Google SRE book — <a href="https://sre.google/sre-book/handling-overload/">Handling overload</a></li>
-</ul>
+<h2><span class="ix">9</span>How to explain it in an interview</h2>
+<div class="script"><b>Your 1-minute answer</b>
+<p><span class="part">Definition</span>Production readiness means the system meets its latency, reliability and cost targets under real load, during failures and during changes.</p>
+<p><span class="part">Latency</span>I set a budget such as p95 under four seconds, run vector and BM25 search in parallel, limit reranking candidates, keep prompts short, and stream the answer so the first token arrives quickly. Caches for embeddings, retrieval, answers and prompt prefixes remove repeated work, with the user's access scope in any answer-cache key.</p>
+<p><span class="part">Reliability</span>Background work uses a transactional outbox, idempotent tasks, retries and reconciliation. Indexes are rebuilt as a new generation, validated and switched in one commit with rollback, and every call has a timeout with graceful fallbacks.</p>
+<p><span class="part">Cost</span>GPU time dominates, so I use right-sized or quantized models where evaluation allows, batching, caching and routing.</p></div>
+<div class="trap">
+  <div class="no"><b>Don't say</b>"We cache answers by question text."</div>
+  <div class="yes"><b>Say instead</b>"The key includes the user's access scope and the index generation, or the cache leaks or goes stale."</div>
+  <div class="no"><b>Don't say</b>"We re-index the live collection when the model changes."</div>
+  <div class="yes"><b>Say instead</b>"We build a new generation alongside, validate it, switch in one step, and keep the old one for rollback."</div>
+</div>
 
 </article></main>
 <script src="assets/path.js"></script>

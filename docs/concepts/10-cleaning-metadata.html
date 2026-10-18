@@ -3,100 +3,146 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cleaning, normalization & metadata</title>
+<title>Cleaning & metadata</title>
 <link rel="stylesheet" href="assets/concepts.css">
 </head>
 <body data-lesson="10">
 <main><article class="content">
 
-<h2><span class="ix">1</span>What you will learn</h2>
-<ul>
-  <li>Text normalization: Unicode, whitespace, hyphenation and encoding repair.</li>
-  <li>Removing boilerplate and duplicates that pollute search results.</li>
-  <li>Which metadata to capture, and how retrieval uses it.</li>
-  <li>Provenance: tracing every chunk back to its source.</li>
-</ul>
+<h2><span class="ix">1</span>What are data cleaning and metadata?</h2>
+<div class="oneline" data-def><small>Interview answer — say this first</small></div>
+<div class="simple"><b>In simple words</b>
+<p><b>Cleaning</b> removes the rubbish from the extracted text: repeated page footers, broken characters and duplicate files. <b>Metadata</b> is a label on every document and chunk — title, page, date, department, version, who may see it — so search can filter and the answer can show the right source.</p></div>
 
-<h2><span class="ix">2</span>Why it matters</h2>
-<p>Raw extracted text is noisy: repeated footers on every page, broken words, odd Unicode, duplicate copies of the same policy. Noise wastes tokens and confuses search. Metadata is what lets you filter ("only 2026 HR policies"), cite ("page 4 of v3") and enforce access.</p>
+<h2><span class="ix">2</span>Why do we need it?</h2>
+<p>Noise hurts in two ways: it <b>wastes tokens</b>, and it <b>wins searches it shouldn't</b>. A footer like "Confidential — Company XYZ — Page 4" repeated on every page weakly matches many questions and pushes real answers out of the top results. Without metadata you cannot say "only the 2026 HR policy" or "only documents this user may see".</p>
+<div class="pc">
+  <div class="con"><h4>Without cleaning and metadata</h4><ul>
+    <li>Footers and headers pollute search results</li>
+    <li>The same file appears twice in the results</li>
+    <li>Old 2024 and new 2026 rules get mixed in one answer</li>
+    <li>Users may see documents they are not allowed to see</li>
+  </ul></div>
+  <div class="pro"><h4>With cleaning and metadata</h4><ul>
+    <li>Only real content is indexed</li>
+    <li>One copy of each document</li>
+    <li>Search filters to the current version</li>
+    <li>Access rules are applied during search</li>
+  </ul></div>
+</div>
+<div class="analogy"><b>Analogy: a well-run library</b>
+<p>A library removes damaged copies and duplicates, and puts a label on every book: subject, author, year, shelf. Without labels you can't ask for "only 2026 books on HR". Cleaning = removing damaged copies. Metadata = the label on every chunk.</p></div>
 
-<h2><span class="ix">3</span>Core ideas</h2>
-<h3>Normalization</h3>
+<h2><span class="ix">3</span>How does it work?</h2>
+<div class="stepcards">
+  <div class="sc"><span class="num">1</span><div><h4>Normalize the text</h4>
+    <p>Fix broken characters, extra spaces and words split across lines.</p>
+    <div class="eg"><b>Example:</b> "employeeâ€™s" → "employee's" · "infor- mation" → "information"</div></div></div>
+  <div class="sc"><span class="num">2</span><div><h4>Remove boilerplate</h4>
+    <p>Delete text that repeats on every page and is not real content: headers, footers, page numbers, menus, legal disclaimers.</p></div></div>
+  <div class="sc"><span class="num">3</span><div><h4>Remove duplicates</h4>
+    <p><b>Exact duplicates</b> have the same content hash (SHA-256). <b>Near-duplicates</b> are almost the same and are found with MinHash or embedding similarity.</p></div></div>
+  <div class="sc"><span class="num">4</span><div><h4>Handle versions</h4>
+    <p>If the file is a changed copy of an existing document, store it as a <b>new version</b> and mark the old one as "superseded".</p></div></div>
+  <div class="sc"><span class="num">5</span><div><h4>Attach metadata to every chunk</h4>
+    <p>Copy document labels (title, version, department, access groups) and add chunk labels (section, page). These become search filters and citation details.</p></div></div>
+</div>
+<div class="pic">
+  <div class="chain">
+    <div class="c">Raw text</div>
+    <div class="c b">Normalize<small>characters, spaces</small></div>
+    <div class="c b">Remove boilerplate<small>headers, footers</small></div>
+    <div class="c b">Deduplicate<small>exact + near</small></div>
+    <div class="c d">Add metadata<small>title, page, date, access</small></div>
+  </div>
+</div>
+<p class="cap">Clean first, then label.</p>
+
+<h2><span class="ix">4</span>Example: step by step</h2>
+<div class="example"><b>Cleaning a 40-page policy PDF</b>
+<ol class="steps">
+  <li>Fix the encoding: "employeeâ€™s" → "employee's".</li>
+  <li>Join words broken across lines: "infor- mation" → "information".</li>
+  <li>Remove the line "Confidential — HR — Page N", which repeats on all 40 pages.</li>
+  <li>The same policy was uploaded twice. Same SHA-256 hash → keep only one.</li>
+  <li>Add this metadata to every chunk:</li>
+</ol>
+<pre><code>{ "title": "Leave Policy", "version": 3, "section_path": "Leave › Carry-over",
+  "page_start": 6, "department": "HR", "language": "en",
+  "effective_date": "2026-04-01", "access_groups": ["all-employees"] }</code></pre></div>
+<div class="example"><b>How metadata is used at question time</b>
+<p>Question: "What is the 2026 travel allowance for managers?" The search adds filters: <code>document_type = policy</code>, <code>department = Finance</code>, <code>effective_date ≥ 2026-01-01</code>. Old 2024 and 2025 versions are excluded automatically, so the answer cannot mix old and new rules.</p></div>
+
+<h2><span class="ix">5</span>Important terms</h2>
+<div class="gloss">
+  <div><b>Normalization</b><p>Making text consistent: same character encoding, clean spaces, joined words.</p></div>
+  <div><b>Boilerplate</b><p>Repeated text that is not real content: headers, footers, menus, disclaimers.</p></div>
+  <div><b>Exact duplicate</b><p>Identical content. Found by comparing a content hash like SHA-256.</p></div>
+  <div><b>Near-duplicate</b><p>Almost the same content. Found with MinHash, SimHash or embedding similarity.</p></div>
+  <div><b>Metadata</b><p>Labels that describe a document or chunk: title, page, date, version, access.</p></div>
+  <div><b>Metadata filter</b><p>A search condition on metadata, such as department = HR.</p></div>
+  <div><b>Metadata enrichment</b><p>Adding labels automatically, for example a local model detects the topic or language.</p></div>
+  <div><b>Provenance</b><p>Where a chunk came from: document, version, page, parser and pipeline version.</p></div>
+</div>
+
+<h2><span class="ix">6</span>Types and comparison</h2>
 <table class="t">
-  <tr><th>Problem</th><th>Fix</th></tr>
-  <tr><td>Same character, different bytes (é vs e + ◌́, full-width digits)</td><td>Unicode normalization (NFC; NFKC for search fields)</td></tr>
-  <tr><td>Mojibake ("Ã©" instead of "é")</td><td>encoding repair (e.g. the <code>ftfy</code> library)</td></tr>
-  <tr><td>"infor- mation" split across lines</td><td>de-hyphenation at line ends</td></tr>
-  <tr><td>ligatures (ﬁ, ﬂ), soft hyphens, zero-width characters</td><td>replace or remove</td></tr>
-  <tr><td>random line breaks inside sentences</td><td>re-flow paragraphs, keep real breaks</td></tr>
+  <tr><th></th><th>Duplicate</th><th>New version</th></tr>
+  <tr><td><b>Content</b></td><td>identical</td><td>changed</td></tr>
+  <tr><td><b>What to do</b></td><td>skip it and return the existing document</td><td>process it and mark the old version "superseded"</td></tr>
 </table>
-<div class="callout warn"><b>Normalize carefully</b>Don't lowercase or strip accents in the <i>stored</i> text. Citations should show the original. Apply aggressive normalization only inside search analyzers (lesson 14).</div>
-
-<h3>Boilerplate and noise</h3>
-<ul>
-  <li>Headers, footers and page numbers repeated on every page: detect lines that repeat across many pages and remove them.</li>
-  <li>HTML navigation, cookie banners and "related articles".</li>
-  <li>Long legal disclaimers repeated in every email or document: keep one copy, or tag them.</li>
-</ul>
-
-<h3>Deduplication</h3>
-<ul>
-  <li><b>Exact duplicates</b>: same SHA-256 of the file or the normalized text.</li>
-  <li><b>Near-duplicates</b>: same content with small edits. Find them with MinHash or SimHash, or with high embedding similarity.</li>
-  <li><b>Versions</b>: a new upload of a known document becomes a new <i>version</i>; the old one is superseded, not duplicated.</li>
-</ul>
-
-<h2><span class="ix">4</span>How it works: metadata that pays off</h2>
 <table class="t">
-  <tr><th>Field</th><th>Used for</th></tr>
-  <tr><td>title, file name, document type</td><td>context in prompts and citations; boosting titles in BM25</td></tr>
-  <tr><td>section path ("Policies › Leave › Sick leave")</td><td>chunk context, citations, structure-aware chunking</td></tr>
-  <tr><td>page start and end</td><td>citations, page preview</td></tr>
-  <tr><td>dates: effective, published, uploaded</td><td>freshness filters, preferring the newest version</td></tr>
-  <tr><td>language</td><td>analyzer choice, embedding model choice, filters</td></tr>
-  <tr><td>department, product, region, tags</td><td>user filters and query routing</td></tr>
-  <tr><td>access groups / sensitivity</td><td>access control filters (lessons 23–24)</td></tr>
-  <tr><td>document version, pipeline version, parser version</td><td>provenance, reproducibility, re-indexing</td></tr>
+  <tr><th>Where metadata comes from</th><th>Examples</th></tr>
+  <tr><td><b>Extracted from the file</b></td><td>title, author, headings, page numbers</td></tr>
+  <tr><td><b>Enriched by a model</b></td><td>topic, document type, detected language</td></tr>
+  <tr><td><b>Provided by the uploader</b></td><td>department, access groups, effective date</td></tr>
 </table>
-<p>Metadata comes from three places: <b>extracted</b> (file properties, headings), <b>enriched</b> (a local model classifies type, topic or language) and <b>provided</b> (the uploader picks a department).</p>
+<div class="remember"><b>Remember</b>
+<p>Keep the <b>original text</b> for citations. Do heavy normalization (lowercasing, stemming) only inside the search index, not in the stored text.</p></div>
 
-<h3>Provenance</h3>
-<p>Every chunk should answer: <i>which document, which version, which page and section, which parser, which pipeline version produced me?</i> This makes citations trustworthy, deletions complete and bugs traceable.</p>
+<h2><span class="ix">7</span>Advantages and limitations</h2>
+<div class="pc">
+  <div class="pro"><h4>Advantages</h4><ul>
+    <li>More precise search results</li>
+    <li>Fewer wasted tokens</li>
+    <li>Current-version answers only</li>
+    <li>Access control and correct citations</li>
+  </ul></div>
+  <div class="con"><h4>Watch out for</h4><ul>
+    <li>Over-cleaning can delete real content</li>
+    <li>Wrong metadata gives wrong filters</li>
+    <li>Near-duplicate detection needs tuning</li>
+    <li>Metadata must stay in sync with the indexes</li>
+  </ul></div>
+</div>
 
-<h2><span class="ix">5</span>In the real world</h2>
-<ul>
-  <li>Index only the metadata you will filter or display. Every extra field costs storage and index size.</li>
-  <li>Prefer a few <b>controlled values</b> (enums) over free text for filterable fields.</li>
-  <li>Enrichment with a local LLM is useful but costs time. Run it as an optional pipeline step and cache it by content hash.</li>
-  <li>Detect PII during ingestion if your policy requires it (lesson 24).</li>
-</ul>
-
-<h2><span class="ix">6</span>Common mistakes</h2>
-<ul>
-  <li>Lowercasing or stripping stored text, then showing ugly citations.</li>
-  <li>Keeping repeated footers, which then appear as "relevant" chunks for many questions.</li>
-  <li>Treating a new version as a new document, so both versions answer and contradict each other.</li>
-  <li>Free-text metadata that can't be filtered reliably.</li>
-</ul>
-
-<h2><span class="ix">7</span>In our platform</h2>
-<div class="platform"><h4>Where this lives</h4><ul>
-  <li>Celery <b>Stage 2</b>: normalize content → reconstruct structure → optional local enrichment.</li>
-  <li><code>document_metadata.metadata_json</code>, <code>documents.lifecycle_status</code>, <code>document_versions.parent_version_id</code> and <code>content_sha256</code> for duplicates and versions.</li>
-  <li>Filterable fields are copied into the Qdrant payload and OpenSearch keyword fields (<code>document_id</code>, <code>document_version_id</code>, <code>section_path</code>, pages).</li>
+<h2><span class="ix">8</span>Where is it used?</h2>
+<div class="uses">
+  <div><b>Version control</b>answer only from the current policy</div>
+  <div><b>Access control</b>filter by the user's groups</div>
+  <div><b>Citations</b>show title, section and page</div>
+  <div><b>Date filters</b>"rules effective in 2026"</div>
+  <div><b>Department search</b>only HR, only Finance</div>
+  <div><b>Deletion</b>find every chunk of a document to delete it</div>
+</div>
+<div class="platform"><h4>In our platform</h4><ul>
+  <li>Celery stage 2: normalize content → rebuild structure → optional local enrichment.</li>
+  <li><code>document_metadata.metadata_json</code> stores labels; duplicates are found with <code>document_versions.content_sha256</code>; versions are linked by <code>parent_version_id</code>.</li>
+  <li>Filter fields are copied into the Qdrant payload and OpenSearch keyword fields.</li>
 </ul></div>
 
-<h2><span class="ix">8</span>Check yourself</h2>
-<details class="q"><summary>Why can repeated footers hurt retrieval?</summary><div>They appear in many chunks, match many queries weakly, and take up top-k slots and tokens without adding information.</div></details>
-<details class="q"><summary>What is the difference between a duplicate and a new version?</summary><div>A duplicate is identical content (same hash) and needs no reprocessing. A new version is changed content of the same logical document: it replaces the old version, which becomes superseded.</div></details>
-
-<h2><span class="ix">9</span>Key terms · Go deeper</h2>
-<div class="terms"><span><b>Unicode NFC / NFKC</b></span><span><b>boilerplate</b></span><span><b>near-duplicate</b></span><span><b>MinHash</b></span><span><b>metadata enrichment</b></span><span><b>provenance</b></span><span><b>lineage</b></span></div>
-<ul class="refs">
-  <li><a href="https://ftfy.readthedocs.io/">ftfy</a> — fixes broken Unicode text</li>
-  <li><a href="https://unicode.org/reports/tr15/">Unicode Normalization Forms (UAX #15)</a></li>
-  <li><a href="https://ekzhu.com/datasketch/minhash.html">datasketch — MinHash</a> for near-duplicate detection</li>
-</ul>
+<h2><span class="ix">9</span>How to explain it in an interview</h2>
+<div class="script"><b>Your 1-minute answer</b>
+<p><span class="part">Definition</span>Data cleaning removes noise from extracted text, such as repeated headers and footers, broken characters and duplicate documents, so that only meaningful content is indexed. Metadata is structured information attached to each document and chunk, such as title, section, page, date, version and access groups.</p>
+<p><span class="part">How</span>I normalize the text, remove boilerplate, detect exact duplicates by content hash and near-duplicates by similarity, and treat changed files as new versions. Then I attach metadata to every chunk.</p>
+<p><span class="part">Example</span>For "the 2026 travel allowance", metadata filters on department and effective date exclude older versions, so the answer cannot mix old and new rules.</p>
+<p><span class="part">Why</span>Clean text improves search precision and saves tokens, and metadata enables filtering, current-version answers, citations and access control.</p></div>
+<div class="trap">
+  <div class="no"><b>Don't say</b>"Lowercase and strip everything before storing."</div>
+  <div class="yes"><b>Say instead</b>"Store the original text for citations; normalize heavily only inside the search analyzers."</div>
+  <div class="no"><b>Don't say</b>"Treat each upload as a new document."</div>
+  <div class="yes"><b>Say instead</b>"Detect duplicates by hash, and handle changed files as new versions of the same document."</div>
+</div>
 
 </article></main>
 <script src="assets/path.js"></script>

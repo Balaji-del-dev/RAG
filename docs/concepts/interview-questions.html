@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interview Q&A bank</title>
+<link rel="stylesheet" href="assets/concepts.css">
+</head>
+<body data-page="bank">
+<main>
+  <div class="path-hero">
+    <span class="stage-chip" style="background:var(--accent)">Practice</span>
+    <h1>Interview Q&amp;A bank</h1>
+    <p class="lead">Every interview question from all 27 lessons, with a model answer and the key words to say. Filter by stage or level, search, mark the ones you know, or practise with flashcards.</p>
+  </div>
+
+  <div class="bank-bar">
+    <select id="f-stage" aria-label="Stage"></select>
+    <input type="search" id="f-search" placeholder="Search questions and answers…" aria-label="Search">
+    <label><input type="checkbox" class="f-level" value="B" checked> <span class="lv lv-B">Basic</span></label>
+    <label><input type="checkbox" class="f-level" value="I" checked> <span class="lv lv-I">Intermediate</span></label>
+    <label><input type="checkbox" class="f-level" value="A" checked> <span class="lv lv-A">Advanced</span></label>
+    <label><input type="checkbox" id="f-new"> only questions I don't know yet</label>
+    <button type="button" id="toggle-answers">Show all answers</button>
+    <button type="button" class="primary" id="start-flash">Practise with flashcards</button>
+  </div>
+
+  <div class="flash" id="flash" hidden>
+    <div class="meta" id="fmeta"></div>
+    <div class="fq" id="fq"></div>
+    <div class="fa" id="fa" hidden></div>
+    <div class="row">
+      <button type="button" data-act="show">Show answer</button>
+      <button type="button" class="knew" data-act="knew">✓ I knew it</button>
+      <button type="button" class="again" data-act="again">↻ Practise again</button>
+      <button type="button" data-act="close">Close</button>
+    </div>
+  </div>
+
+  <div class="bank-count" id="bank-count"></div>
+  <div id="bank-list"></div>
+</main>
+<script src="assets/path.js"></script>
+</body>
+</html>

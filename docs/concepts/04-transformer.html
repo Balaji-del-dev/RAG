@@ -3,131 +3,174 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Transformer architecture</title>
+<title>Transformer & attention</title>
 <link rel="stylesheet" href="assets/concepts.css">
 <style>
-  .stack { display: grid; gap: 6px; max-width: 420px; margin: 18px auto; text-align: center; }
-  .stack .bx { border-radius: 10px; padding: 9px 12px; font-weight: 700; font-size: 14.5px; border: 1.5px solid var(--line-2); background: var(--surface); }
+  .stack { display: grid; gap: 6px; max-width: 460px; margin: 0 auto; text-align: center; }
+  .stack .bx { border-radius: 10px; padding: 9px 12px; font-weight: 700; font-size: 14.5px; border: 1.5px solid var(--line-2); background: var(--surface-2); }
   .stack .bx small { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; }
-  .stack .rep { border: 2px dashed var(--accent); border-radius: 14px; padding: 10px; display: grid; gap: 6px; position: relative; }
-  .stack .rep::after { content: "× N layers"; position: absolute; right: 10px; top: -11px; padding: 0 6px; background: var(--bg); font-weight: 800; color: var(--accent); font-size: 13px; }
-  .stack .ar { color: var(--muted); font-weight: 800; }
+  .stack .rep { border: 2px dashed var(--accent); border-radius: 14px; padding: 18px 10px 10px; display: grid; gap: 6px; position: relative; }
+  .stack .rep::after { content: "repeat × N layers"; position: absolute; right: 10px; top: -11px; padding: 0 6px; background: var(--surface); font-weight: 800; color: var(--accent); font-size: 13px; }
+  .stack .ar { color: var(--muted); font-weight: 800; line-height: 1; }
   .stack .att { border-color: var(--s1); } .stack .ffn { border-color: var(--s3); }
 </style>
 </head>
 <body data-lesson="04">
 <main><article class="content">
 
-<h2><span class="ix">1</span>What you will learn</h2>
-<ul>
-  <li>The building blocks of a transformer: embeddings, positions, self-attention, feed-forward layers, residuals and normalization.</li>
-  <li>How attention works with queries, keys and values, including the formula.</li>
-  <li>Encoder-only, decoder-only and encoder-decoder models, and which one each RAG component uses.</li>
-  <li>The KV cache, why long context is expensive, and modern improvements (RoPE, GQA, MoE, FlashAttention).</li>
-</ul>
+<h2><span class="ix">1</span>What is a transformer?</h2>
+<div class="oneline" data-def><small>Interview answer — say this first</small></div>
+<div class="simple"><b>In simple words</b>
+<p>A transformer is the design used inside every modern LLM. Its key idea is <b>attention</b>: when it reads a word, it looks at all the other words in the sentence and decides which ones matter most for understanding that word.</p></div>
 
-<h2><span class="ix">2</span>Why it matters</h2>
-<p>Every model in a RAG system is a transformer: the LLM that writes the answer, the embedding model that finds chunks, and the cross-encoder that reranks them. Understanding attention explains real engineering limits: why context windows are finite, why long prompts are slow and use GPU memory, and why rerankers are more accurate but slower than embedders.</p>
+<h2><span class="ix">2</span>Why do we need it?</h2>
+<p>Before transformers, language models (RNNs and LSTMs) read text <b>one word at a time</b>, like reading through a tube. By the end of a long paragraph they had "forgotten" the beginning, and they were slow to train because each word had to wait for the previous one.</p>
+<div class="pc">
+  <div class="con"><h4>Older models (RNN / LSTM)</h4><ul>
+    <li>Read one word after another</li>
+    <li>Forget information over long distances</li>
+    <li>Slow to train — hard to use many GPUs</li>
+  </ul></div>
+  <div class="pro"><h4>Transformer</h4><ul>
+    <li>Reads all tokens at the same time</li>
+    <li>Any token can connect directly to any other token</li>
+    <li>Fast to train on GPUs, so models could become huge</li>
+  </ul></div>
+</div>
+<div class="analogy"><b>Analogy: how you understand "it"</b>
+<p>"The <b>animal</b> didn't cross the street because <b>it</b> was too tired." To understand "it", your brain looks back and links it to "animal", not "street". Self-attention does exactly this, for every token, using numbers.</p></div>
 
-<h2><span class="ix">3</span>Core ideas</h2>
-<h3>The big picture of a decoder-only LLM</h3>
+<h2><span class="ix">3</span>How does it work?</h2>
+<div class="stepcards">
+  <div class="sc"><span class="num">1</span><div><h4>Turn tokens into vectors and add their position</h4>
+    <p>Each token ID becomes an embedding vector. Attention by itself does not know word order ("dog bites man" vs "man bites dog"), so <b>position information</b> is added. Modern LLMs use a method called <b>RoPE</b>.</p></div></div>
+  <div class="sc"><span class="num">2</span><div><h4>Self-attention: every token looks at the other tokens</h4>
+    <p>Each token decides how much every other token matters to it, gives each one a <b>weight</b>, and mixes in their information. After this step, the vector for "it" contains information about "animal".</p>
+    <div class="eg"><b>Example:</b> weights for "it" → animal 0.55 · street 0.18 · it 0.10 · others small (all add up to 1)</div></div></div>
+  <div class="sc"><span class="num">3</span><div><h4>Feed-forward network: process each token</h4>
+    <p>A small neural network then processes each token's vector on its own. This is where much of the model's learned knowledge is stored.</p></div></div>
+  <div class="sc"><span class="num">4</span><div><h4>Repeat in many layers</h4>
+    <p>Steps 2 and 3 form one <b>transformer block</b> (layer). The model stacks many of them; each layer builds a deeper understanding. An 8B model has about 32 layers; a 70B model about 80.</p></div></div>
+  <div class="sc"><span class="num">5</span><div><h4>Predict the next token</h4>
+    <p>The final vector goes into an output layer that gives a probability for every token in the vocabulary (lesson 01).</p></div></div>
+</div>
+<div class="pic">
 <div class="stack">
-  <div class="bx">Token IDs<small>from the tokenizer (lesson 02)</small></div><div class="ar">↓</div>
-  <div class="bx">Token embeddings + position information<small>one vector per token</small></div><div class="ar">↓</div>
+  <div class="bx">Token IDs<small>from the tokenizer</small></div><div class="ar">↓</div>
+  <div class="bx">Token embeddings + position information</div><div class="ar">↓</div>
   <div class="rep">
-    <div class="bx att">Masked multi-head self-attention<small>each token gathers information from earlier tokens</small></div>
-    <div class="bx">Add &amp; normalize<small>residual connection + LayerNorm / RMSNorm</small></div>
-    <div class="bx ffn">Feed-forward network (MLP)<small>processes each token independently</small></div>
-    <div class="bx">Add &amp; normalize</div>
+    <div class="bx att">Multi-head self-attention<small>tokens share information</small></div>
+    <div class="bx">Add &amp; Norm<small>residual connection + normalization</small></div>
+    <div class="bx ffn">Feed-forward network<small>processes each token on its own</small></div>
+    <div class="bx">Add &amp; Norm</div>
   </div><div class="ar">↓</div>
-  <div class="bx">Output head → logits → softmax<small>probability of every next token</small></div>
-</div>
-<p>A model stacks the same block many times: around 32 layers for an 8B model and 80 for a 70B model. Each layer refines every token's vector using information from the tokens around it.</p>
+  <div class="bx">Linear + softmax<small>probability of every next token</small></div>
+</div></div>
+<p class="cap">Draw this on the whiteboard: one transformer block, repeated N times.</p>
 
-<h3>Self-attention in plain words</h3>
-<p>In "I sat on the <b>bank</b> of the river", the vector for <i>bank</i> needs information from <i>river</i>. Attention lets every token ask a question and gather relevant information from other tokens:</p>
-<ul>
-  <li><b>Query (Q)</b> — what this token is looking for.</li>
-  <li><b>Key (K)</b> — what each token offers, used to match against queries.</li>
-  <li><b>Value (V)</b> — the information a token passes on when it is attended to.</li>
-</ul>
-<p>Q, K and V are three learned projections of each token's vector. Matching every query against every key gives attention weights. Each token's new vector is a weighted mix of the values.</p>
-
-<h3>The formula</h3>
-<pre><code>Attention(Q, K, V) = softmax( Q·Kᵀ / √d_k  +  mask ) · V</code></pre>
-<ul>
-  <li><b>Q·Kᵀ</b>: similarity of every query with every key, an n × n matrix for n tokens.</li>
-  <li><b>÷ √d_k</b>: keeps the scores in a reasonable range, so softmax does not saturate as dimensions grow.</li>
-  <li><b>mask</b>: in decoder models, a <b>causal mask</b> blocks attention to future tokens, so the model can only use the past.</li>
-  <li><b>softmax</b>: turns scores into weights that sum to 1.</li>
-</ul>
-
-<h3>Multi-head attention</h3>
-<p>Attention runs in parallel in several <b>heads</b> (for example 32). Each head learns different relations — syntax, references, positions, topics. The results are concatenated and mixed again.</p>
-
-<h3>Positions</h3>
-<p>Attention by itself ignores word order, so position information is added. Modern LLMs use <b>RoPE</b> (rotary position embeddings), which rotates Q and K by an angle that depends on position. Context-extension methods stretch these angles so a model can handle longer inputs.</p>
-
-<h2><span class="ix">4</span>Three families — and where RAG uses each</h2>
-<table class="t">
-  <tr><th>Type</th><th>Attention</th><th>Examples</th><th>Used in RAG for</th></tr>
-  <tr><td><b>Encoder-only</b></td><td>bidirectional: every token sees every other</td><td>BERT, RoBERTa, BGE, E5</td><td><b>Embedding models</b> (lesson 12) and <b>cross-encoder rerankers</b> (lesson 17)</td></tr>
-  <tr><td><b>Decoder-only</b></td><td>causal: only previous tokens</td><td>Llama, Qwen, Mistral, Gemma, gpt-oss</td><td><b>Answer generation</b>, query rewriting, LLM judges</td></tr>
-  <tr><td><b>Encoder-decoder</b></td><td>encoder reads input, decoder writes output</td><td>T5, BART</td><td>translation and summarization; some rerankers</td></tr>
-</table>
-<p>Some newer embedding models are built on decoder LLMs, but they are still used as encoders: text in, one vector out.</p>
-
-<h3>Prefill, decode and the KV cache</h3>
+<h3>How attention calculates the weights: Query, Key, Value</h3>
+<div class="analogy"><b>Analogy: searching in a library</b>
+<p><b>Query</b> = what you are looking for ("a book about animals"). <b>Key</b> = the label on each book. <b>Value</b> = the content inside the book. You compare your query with every label; the better the match, the more of that book you read. In attention, every token does this with every other token.</p></div>
 <ol class="steps">
-  <li><b>Prefill</b>: the whole prompt is processed in one parallel pass, and keys and values are computed for every token in every layer.</li>
-  <li><b>Decode</b>: for each new token, only that token's Q, K and V are computed. Its query attends to all stored keys and values.</li>
-  <li>The stored keys and values are the <b>KV cache</b>. It trades memory for speed, because nothing is recomputed.</li>
+  <li><b>Make Q, K and V.</b> Each token vector is multiplied by three learned matrices to get a query, a key and a value.</li>
+  <li><b>Score.</b> Compare each query with every key using a dot product: <code>Q · Kᵀ</code>.</li>
+  <li><b>Scale.</b> Divide by <code>√d_k</code> (the size of the key) so the scores don't become too large.</li>
+  <li><b>Mask.</b> In chat models, hide future tokens, so a token can only look at earlier tokens.</li>
+  <li><b>Softmax.</b> Turn the scores into weights that add up to 1.</li>
+  <li><b>Mix.</b> The new vector = the weighted sum of the value vectors.</li>
 </ol>
-<div class="callout info"><b>Real numbers: Llama-3-8B</b>32 layers × 8 KV heads × 128 head dimension × 2 (K and V) × 2 bytes (fp16) = <b>128 KB per token</b>. An 8,192-token context uses about <b>1 GB</b> of GPU memory per sequence. Ten concurrent users with long prompts need about 10 GB just for the cache. This is why context length and concurrency are capacity decisions.</div>
+<pre><code>Attention(Q, K, V) = softmax( Q · Kᵀ / √d_k  +  mask ) · V</code></pre>
 
-<h3>Why long context is expensive</h3>
-<p>Attention compares every token with every other token: compute grows with <b>n²</b> during prefill, and KV memory grows with <b>n</b> per sequence. Doubling the context roughly quadruples attention compute. Long prompts also degrade quality ("lost in the middle", lesson 18).</p>
+<h2><span class="ix">4</span>Example: step by step</h2>
+<div class="example"><b>Attention for the token "it" (tiny numbers, d_k = 2)</b>
+<ol class="steps">
+  <li>Raw scores of "it" against [animal, street, tired] = <b>[2.0, 0.5, 0.1]</b>.</li>
+  <li>Divide by √2 ≈ 1.41 → <b>[1.41, 0.35, 0.07]</b>.</li>
+  <li>Softmax turns them into weights → <b>[0.62, 0.22, 0.16]</b>.</li>
+  <li>So the new vector for "it" takes <b>62%</b> of its information from "animal". The model now "knows" what "it" refers to.</li>
+</ol></div>
+<div class="callout info"><b>Real number: the KV cache of Llama-3-8B</b>While generating, the model stores the keys and values of all earlier tokens (the <b>KV cache</b>) so it doesn't recompute them. Size: 32 layers × 8 KV heads × 128 numbers × 2 (K and V) × 2 bytes ≈ <b>128 KB per token</b>. An 8,000-token conversation ≈ <b>1 GB</b> of GPU memory, per user.</div>
 
-<h2><span class="ix">5</span>In the real world: modern improvements</h2>
-<div class="cards">
-  <div class="card"><h4>GQA (grouped-query attention)</h4><p>Several query heads share one key/value head, which shrinks the KV cache 4–8× with little quality loss. Used in Llama 3, Qwen and others.</p></div>
-  <div class="card"><h4>FlashAttention</h4><p>Computes exact attention in GPU-friendly tiles, so it is much faster and uses far less memory. Standard in serving engines.</p></div>
-  <div class="card"><h4>Mixture of Experts (MoE)</h4><p>The feed-forward layer is split into many "experts" and only a few run per token. A big model at the speed of a small one, but <b>all</b> weights must still fit in memory.</p></div>
-  <div class="card"><h4>Sliding-window &amp; hybrid attention</h4><p>Some layers attend only to recent tokens, cutting cost on long inputs.</p></div>
-  <div class="card"><h4>PagedAttention</h4><p>vLLM stores the KV cache in pages like virtual memory, so many requests share a GPU efficiently (lesson 06).</p></div>
-  <div class="card"><h4>Prefix caching</h4><p>Reuse the KV cache of a shared prompt prefix (system prompt, instructions) across requests. This saves prefill time (lesson 25).</p></div>
+<h2><span class="ix">5</span>Important terms</h2>
+<div class="gloss">
+  <div><b>Self-attention</b><p>Each token gathers information from the other tokens, weighted by how relevant they are.</p></div>
+  <div><b>Query, Key, Value (Q, K, V)</b><p>Query = what a token looks for. Key = what a token offers for matching. Value = the information it passes on.</p></div>
+  <div><b>Multi-head attention</b><p>Attention runs many times in parallel ("heads"). Each head can learn a different relation, such as grammar or references.</p></div>
+  <div><b>Causal mask</b><p>Stops a token from looking at future tokens. Used in models that generate text.</p></div>
+  <div><b>Positional encoding / RoPE</b><p>Adds word-order information. RoPE does it by rotating the Q and K vectors.</p></div>
+  <div><b>Feed-forward network (FFN)</b><p>A small neural network applied to each token after attention.</p></div>
+  <div><b>Residual connection + layer norm</b><p>Each block adds its output to its input and normalizes it. This keeps training of very deep models stable.</p></div>
+  <div><b>KV cache</b><p>Stored keys and values of earlier tokens, reused while generating so the model is faster.</p></div>
+  <div><b>GQA (grouped-query attention)</b><p>Several query heads share one K/V head, so the KV cache is much smaller.</p></div>
+  <div><b>MoE (Mixture of Experts)</b><p>Many feed-forward "experts", but only a few run for each token: big capacity, less compute.</p></div>
 </div>
 
-<h2><span class="ix">6</span>Common mistakes</h2>
-<ul>
-  <li>Setting a huge context window "just in case". It reserves GPU memory and lowers concurrency.</li>
-  <li>Assuming a model handles its advertised maximum context equally well everywhere. Quality usually drops toward the limit.</li>
-  <li>Comparing an embedder (one vector per text) with a cross-encoder (scores a query-passage pair) as if they did the same job.</li>
-  <li>Forgetting that an MoE model needs memory for all experts, not just the active ones.</li>
-</ul>
+<h2><span class="ix">6</span>Types and comparison</h2>
+<h3>The three types of transformer</h3>
+<table class="t">
+  <tr><th>Type</th><th>How attention works</th><th>Examples</th><th>Used for</th></tr>
+  <tr><td><b>Encoder-only</b></td><td>every token sees every token (both directions)</td><td>BERT, RoBERTa, BGE, E5</td><td><b>understanding</b>: embeddings, classification, rerankers</td></tr>
+  <tr><td><b>Decoder-only</b></td><td>each token sees only earlier tokens</td><td>GPT, Llama, Qwen, Mistral, Gemma</td><td><b>generating text</b>: chat LLMs</td></tr>
+  <tr><td><b>Encoder-decoder</b></td><td>encoder reads the input, decoder writes the output</td><td>T5, BART</td><td>translation, summarization</td></tr>
+</table>
+<h3>RNN / LSTM vs transformer</h3>
+<table class="t">
+  <tr><th></th><th>RNN / LSTM</th><th>Transformer</th></tr>
+  <tr><td><b>How it reads</b></td><td>one token after another</td><td>all tokens at once</td></tr>
+  <tr><td><b>Long-distance links</b></td><td>weak, it forgets</td><td>strong, any token can attend to any token</td></tr>
+  <tr><td><b>Training speed</b></td><td>slow</td><td>fast on GPUs</td></tr>
+  <tr><td><b>Cost for long text (n tokens)</b></td><td>grows with n</td><td>attention grows with n² (quadratic)</td></tr>
+</table>
+<div class="remember"><b>Remember</b>
+<p>In a RAG system you use <b>both</b> kinds: an <b>encoder</b> for embeddings and reranking, and a <b>decoder</b> LLM to write the answer.</p></div>
 
-<h2><span class="ix">7</span>In our platform</h2>
-<div class="platform"><h4>Where this lives</h4><ul>
-  <li><b>Decoder LLM</b> served by Ollama or vLLM behind LiteLLM: the context window and KV cache decide how many chunks and how many concurrent chats fit on the GPU.</li>
-  <li><b>Encoder models</b>: the local embedding model (ingestion and query) and the cross-encoder reranker.</li>
-  <li><code>retrieval_definitions.context_config</code> and the context-budget step keep prompts well below the window size.</li>
+<h2><span class="ix">7</span>Advantages and limitations</h2>
+<div class="pc">
+  <div class="pro"><h4>Advantages</h4><ul>
+    <li>Understands long-range connections in text</li>
+    <li>Trains in parallel, so it scales to billions of parameters</li>
+    <li>One design works for text, code, images and audio</li>
+    <li>Same building block for embedders, rerankers and LLMs</li>
+  </ul></div>
+  <div class="con"><h4>Limitations</h4><ul>
+    <li>Attention cost grows with n²: doubling the text ≈ 4× the attention work</li>
+    <li>The KV cache uses a lot of GPU memory for long chats</li>
+    <li>Needs a lot of data and compute to train</li>
+    <li>Has a fixed maximum context length</li>
+  </ul></div>
+</div>
+
+<h2><span class="ix">8</span>Where is it used?</h2>
+<div class="uses">
+  <div><b>Chat LLMs</b>decoder-only: GPT, Llama, Qwen, Mistral</div>
+  <div><b>Embedding models</b>encoder-only: BGE, E5, GTE</div>
+  <div><b>Rerankers</b>encoder-only cross-encoders</div>
+  <div><b>Translation</b>encoder-decoder models</div>
+  <div><b>Vision and speech</b>Vision Transformers, Whisper</div>
+  <div><b>Code assistants</b>decoder-only code models</div>
+</div>
+<div class="example"><b>Real example: "Why is our 128K-context chatbot slow and out of GPU memory?"</b>
+<p>The team sends whole documents (100,000 tokens) in every prompt. Attention compares every token with every other token, and the KV cache grows with every token and every user. So each request is slow and uses many GB. <b>The fix:</b> use RAG with reranking and send only the few best chunks.</p></div>
+<div class="platform"><h4>In our platform</h4><ul>
+  <li>A <b>decoder</b> LLM (through Ollama or vLLM) writes the answers. Its context size and KV cache decide how many users fit on one GPU.</li>
+  <li><b>Encoder</b> models: the embedding model and the cross-encoder reranker.</li>
+  <li>The context budget step keeps prompts small, so answers are faster and use less memory.</li>
 </ul></div>
 
-<h2><span class="ix">8</span>Check yourself</h2>
-<details class="q"><summary>What do Q, K and V do in attention?</summary><div>The query says what a token is looking for, keys are matched against queries to get weights, and values are the information mixed into the token's new vector according to those weights.</div></details>
-<details class="q"><summary>Why divide by √d_k?</summary><div>Dot products grow with vector dimension. Without scaling, softmax becomes extremely peaked, gradients vanish and training becomes unstable.</div></details>
-<details class="q"><summary>Why does a decoder model use a causal mask?</summary><div>During generation the model can only see previous tokens. The mask enforces this in training too, so each position learns to predict the next token from the past only.</div></details>
-<details class="q"><summary>Which model type is a cross-encoder reranker, and why is it slower than an embedder at query time?</summary><div>It is usually an encoder that reads the query and the passage together. It must run once per candidate pair at query time, whereas embeddings of passages are computed once in advance.</div></details>
-<details class="q"><summary>What does the KV cache trade?</summary><div>GPU memory for speed: keys and values of past tokens are stored instead of recomputed for every new token.</div></details>
-
-<h2><span class="ix">9</span>Key terms · Go deeper</h2>
-<div class="terms"><span><b>self-attention</b></span><span><b>Q / K / V</b></span><span><b>multi-head</b></span><span><b>causal mask</b></span><span><b>RoPE</b></span><span><b>residual</b></span><span><b>LayerNorm</b></span><span><b>KV cache</b></span><span><b>GQA</b></span><span><b>MoE</b></span><span><b>FlashAttention</b></span></div>
-<ul class="refs">
-  <li>Vaswani et al. — <a href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a> (2017)</li>
-  <li>Jay Alammar — <a href="https://jalammar.github.io/illustrated-transformer/">The Illustrated Transformer</a></li>
-  <li>Andrej Karpathy — <a href="https://www.youtube.com/watch?v=kCc8FmEb1nY">Let's build GPT: from scratch, in code</a></li>
-  <li>Su et al. — <a href="https://arxiv.org/abs/2104.09864">RoFormer / RoPE</a> · Ainslie et al. — <a href="https://arxiv.org/abs/2305.13245">GQA</a> · Dao et al. — <a href="https://arxiv.org/abs/2205.14135">FlashAttention</a></li>
-</ul>
+<h2><span class="ix">9</span>How to explain it in an interview</h2>
+<div class="script"><b>Your 1-minute answer</b>
+<p><span class="part">Definition</span>A transformer is a neural network architecture, introduced in 2017, that processes all tokens in parallel and uses self-attention to relate each token to every other token.</p>
+<p><span class="part">How it works</span>Each token is converted into query, key and value vectors. The query of one token is compared with the keys of all tokens, softmax turns the scores into weights, and the token's new representation is the weighted sum of the values. Each block also has a feed-forward network, and many blocks are stacked.</p>
+<p><span class="part">Example</span>In "The animal didn't cross the street because it was tired", attention gives "it" a high weight on "animal", so the model understands what "it" refers to.</p>
+<p><span class="part">Trade-off</span>Transformers replaced RNNs because they train in parallel and handle long-range context, but attention cost grows quadratically with length, and the KV cache uses a lot of GPU memory.</p></div>
+<div class="trap">
+  <div class="no"><b>Don't say</b>"BERT is used to generate chat answers."</div>
+  <div class="yes"><b>Say instead</b>"BERT is an encoder for understanding, like embeddings and classification. Chat LLMs are decoder-only."</div>
+  <div class="no"><b>Don't say</b>"The KV cache stores the model weights."</div>
+  <div class="yes"><b>Say instead</b>"It stores the keys and values of earlier tokens, so they are not recomputed during generation."</div>
+  <div class="no"><b>Don't say</b>"Doubling the context doubles the attention cost."</div>
+  <div class="yes"><b>Say instead</b>"Attention is quadratic: doubling the length roughly quadruples the attention compute."</div>
+</div>
 
 </article></main>
 <script src="assets/path.js"></script>

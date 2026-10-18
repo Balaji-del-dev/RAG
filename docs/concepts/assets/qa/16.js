@@ -1,0 +1,42 @@
+// Interview content for lesson 16. def: interview definition · revise: revision card ·
+// qa: questions (l: B basic · I intermediate · A advanced; a: model answer; k: key words; f: likely follow-up).
+window.QA = window.QA || {};
+window.QA["16"] = {
+  def: "<b>Hybrid search</b> is a retrieval approach that runs semantic vector search and lexical keyword search such as BM25 on the same query and combines their results. Because the two methods produce scores on different scales, the results are merged with a rank-based method such as <b>Reciprocal Rank Fusion (RRF)</b>, which scores each document by the sum of 1 / (k + rank) across the result lists. Documents ranked highly by both methods rise to the top, which improves recall compared with either method alone.",
+  revise: [
+    "Dense search captures meaning; BM25 captures exact terms; together they give higher recall.",
+    "Raw scores cannot be added directly because their scales differ.",
+    "RRF(d) = Σ wᵢ / (k + rankᵢ(d)), with k ≈ 60: rank-based, robust and calibration-free.",
+    "Weighted score fusion requires normalization and a tuned weight α.",
+    "Retrieve 20–100 candidates from each method, apply identical filters, dedupe by chunk ID, then rerank.",
+  ],
+  qa: [
+    { l: "B", q: "What is hybrid search?",
+      a: "Hybrid search is a retrieval approach that combines dense vector search, which matches meaning, with lexical search such as BM25, which matches exact terms. Both searches are run for the same query and their results are merged into a single ranked list. This improves recall, because each method finds relevant documents that the other misses — for example, paraphrased questions for dense search and identifiers or codes for BM25.",
+      k: ["dense + lexical", "same query", "merged ranking", "higher recall", "complementary strengths"] },
+    { l: "B", q: "Why can't the scores from vector search and BM25 simply be added together?",
+      a: "The two scores are on different, incompatible scales. Cosine similarity typically lies between 0 and 1, while BM25 scores are unbounded and vary greatly from one query to another. Adding them directly would allow one method to dominate on some queries and become irrelevant on others. The results must therefore be combined by rank, as in Reciprocal Rank Fusion, or after normalizing the scores.",
+      k: ["different scales", "cosine 0–1", "BM25 unbounded", "one method dominates", "fuse by rank or normalize"] },
+    { l: "B", q: "What is Reciprocal Rank Fusion (RRF)?",
+      a: "Reciprocal Rank Fusion is a method for combining several ranked result lists. Each document receives a score equal to the sum, over all lists, of 1 divided by k plus its rank in that list, where k is a constant usually set to 60. Because it uses only rank positions, it requires no score calibration, and documents that appear near the top of several lists receive the highest combined scores.",
+      k: ["combine ranked lists", "Σ 1 / (k + rank)", "k ≈ 60", "rank positions only", "no calibration"] },
+    { l: "I", q: "What does the constant k control in RRF?",
+      a: "The constant k controls how quickly a document's contribution decreases as its rank becomes lower. With a small k, the top positions dominate the combined score; with a larger k, such as 60, the differences between nearby ranks are smoothed, so agreement between lists matters more than being first in a single list. The commonly used value of 60 comes from the original RRF research and works well across many datasets.",
+      k: ["rate of decay with rank", "small k — top ranks dominate", "large k — smoother", "60 from the original paper"] },
+    { l: "I", q: "What is weighted score fusion, and how does it compare with RRF?",
+      a: "Weighted score fusion normalizes the scores of each retriever, for example with min-max or z-score normalization per query, and then combines them as α times the dense score plus one minus α times the lexical score. When it is carefully tuned on good evaluation data, it can outperform RRF, but it is sensitive to outliers and to the choice of α. RRF is more robust and requires no tuning, so it is the usual default.",
+      k: ["normalize then combine", "weight α", "tuning required", "sensitive to outliers", "RRF as robust default"] },
+    { l: "I", q: "How many candidates should each retriever return before fusion?",
+      a: "Each retriever should return enough candidates for fusion and reranking to be effective — typically between 20 and 100. If only five results are taken from each, a relevant document ranked sixth by one method can never be recovered. After fusion, the top 30 to 50 candidates are usually passed to a cross-encoder reranker, which selects the final five to ten chunks for the prompt.",
+      k: ["20–100 per retriever", "room to recover", "top 30–50 to reranker", "final 5–10"] },
+    { l: "I", q: "Why must both retrievers use the same filters and the same index version?",
+      a: "If the filters differ, one retriever may return documents that the user is not permitted to see, or that fall outside the requested scope, and fusion would pass them to the model. If the two indexes come from different index versions, their results may refer to different chunk sets or document versions, producing inconsistent answers. Both searches must therefore apply identical filters on the same published index generation.",
+      k: ["identical access filters", "same index generation", "avoid leakage", "consistent chunk sets"] },
+    { l: "A", q: "When would you implement fusion in the application rather than inside the search engine?",
+      a: "Native fusion is available inside a single engine — for example, Qdrant can fuse dense and sparse vectors in one query, and OpenSearch provides hybrid queries with normalization or RRF. When dense search and lexical search run in separate systems, such as Qdrant for vectors and OpenSearch for BM25, the fusion must be implemented in the application layer, which also provides full control over weights, deduplication and logging.",
+      k: ["native fusion within one engine", "separate systems require application fusion", "control over weights", "deduplication and logging"] },
+    { l: "A", q: "How would you decide whether to give BM25 more weight than dense retrieval?",
+      a: "I would base the decision on evaluation data. I would run the evaluation set with different weights in the fusion step and compare recall and ranking metrics overall and by question type. Corpora with many identifiers, codes and names often benefit from a higher lexical weight, while conversational or paraphrased questions favour dense retrieval. I would adopt a non-default weight only if it produces a consistent improvement.",
+      k: ["evaluation-driven", "compare weights", "by question type", "ID-heavy corpora favour BM25", "consistent improvement"] },
+  ],
+};

@@ -3,109 +3,169 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chunking</title>
+<title>Chunking strategies</title>
 <link rel="stylesheet" href="assets/concepts.css">
 </head>
 <body data-lesson="11">
 <main><article class="content">
 
-<h2><span class="ix">1</span>What you will learn</h2>
+<h2><span class="ix">1</span>What is chunking?</h2>
+<div class="oneline" data-def><small>Interview answer — say this first</small></div>
+<div class="simple"><b>In simple words</b>
+<p>Chunking means cutting long documents into small pieces before storing them for search. Each piece (a <b>chunk</b>) should hold one idea, be small enough to search precisely, and be big enough to make sense on its own.</p></div>
+
+<h2><span class="ix">2</span>Why do we need it?</h2>
 <ul>
-  <li>Why documents are split into chunks, and how chunk size changes retrieval.</li>
-  <li>The main strategies: fixed, recursive, structure-aware, semantic, parent-child and sentence-window.</li>
-  <li>Contextual chunk headers and "contextual retrieval".</li>
-  <li>How to choose and test chunk settings.</li>
+  <li><b>Embedding models have limits.</b> Many can read only 512 or 8,192 tokens. Longer text is cut off.</li>
+  <li><b>One vector per chapter is too blurry.</b> A whole chapter covers many topics, so its vector matches nothing well.</li>
+  <li><b>The LLM's context window is limited.</b> Sending 5 small, relevant chunks is better than 5 whole documents.</li>
+  <li><b>Citations need precision.</b> A chunk points to a specific section and page.</li>
 </ul>
+<div class="pc">
+  <div class="con"><h4>Too small (one sentence)</h4><ul>
+    <li>"It must be filed within 10 days." — <i>what</i> must?</li>
+    <li>Context is lost</li>
+    <li>Many vectors to store</li>
+  </ul></div>
+  <div class="con"><h4>Too big (a whole chapter)</h4><ul>
+    <li>The vector mixes many topics</li>
+    <li>Search becomes imprecise</li>
+    <li>Wastes the context window</li>
+  </ul></div>
+</div>
+<div class="analogy"><b>Analogy: the index of a textbook</b>
+<p>A good index points you to the right <i>page</i>, not the whole book. If it pointed to a single <i>line</i>, you'd lose the context. If it pointed to a whole <i>chapter</i>, you'd read 30 pages for one fact. Chunking is choosing the right "page size" for search.</p></div>
 
-<h2><span class="ix">2</span>Why it matters</h2>
-<p>The chunk is the unit that gets embedded, retrieved, ranked and cited. Chunks that are too big give blurry vectors, waste tokens and make citations vague. Chunks that are too small lose the context needed to understand them ("it must be filed within 10 days" — <i>what</i> must?). Chunking is one of the highest-impact, cheapest settings to tune.</p>
+<h2><span class="ix">3</span>How does it work?</h2>
+<div class="stepcards">
+  <div class="sc"><span class="num">1</span><div><h4>Follow the document's structure</h4>
+    <p>Start from the parsed headings, sections, clauses, slides and tables (lesson 09). Natural boundaries make the best cut points.</p></div></div>
+  <div class="sc"><span class="num">2</span><div><h4>Split big sections to a target size</h4>
+    <p>If a section is too long, split it on the biggest separator that fits: paragraphs, then sentences, then words. A common target is <b>300–800 tokens</b>, measured with the embedding model's tokenizer.</p></div></div>
+  <div class="sc"><span class="num">3</span><div><h4>Add a small overlap</h4>
+    <p>Neighbouring chunks share 10–20% of their text, so a sentence on a boundary is not lost.</p>
+    <div class="eg"><b>Example:</b> chunk 1 = tokens 1–500, chunk 2 = tokens 401–900 (100-token overlap)</div></div></div>
+  <div class="sc"><span class="num">4</span><div><h4>Add a header with the context</h4>
+    <p>Prepend the document title and section path, so the chunk makes sense alone.</p>
+    <div class="eg"><b>Example:</b> "Pricing Guide › Enterprise plan › Support add-on: The fee is ₹500 per month."</div></div></div>
+  <div class="sc"><span class="num">5</span><div><h4>Save the chunk with its details</h4>
+    <p>Store the text, token count, page numbers, section path and links to the parent and neighbouring chunks.</p></div></div>
+</div>
+<div class="pic">
+  <h4>Fixed-size chunks with overlap</h4>
+  <div class="chain">
+    <div class="c">Document</div>
+    <div class="c b">Chunk 1<small>tokens 1–500</small></div>
+    <div class="c b">Chunk 2<small>tokens 401–900</small></div>
+    <div class="c b">Chunk 3<small>tokens 801–1,300</small></div>
+  </div>
+  <h4>Parent-child (small-to-big)</h4>
+  <div class="chain">
+    <div class="c c3">Search finds a small child<small>300 tokens — precise</small></div>
+    <div class="c a">Look up its parent</div>
+    <div class="c b">Send the parent section to the LLM<small>1,500 tokens — full context</small></div>
+  </div>
+</div>
+<p class="cap">Parent-child gives the best of both: small chunks for precise search, bigger sections for the answer.</p>
 
-<h2><span class="ix">3</span>Core ideas</h2>
-<h3>Why chunk at all</h3>
-<ul>
-  <li><b>Model limits</b>: embedding models accept 512–8,192 tokens (lesson 02).</li>
-  <li><b>Precision</b>: one vector for a 40-page document averages everything and matches nothing well.</li>
-  <li><b>Context budget</b>: you can fit 5–10 focused chunks in a prompt, not 5 whole documents.</li>
-  <li><b>Citations</b>: chunk-level provenance points to a page and section.</li>
-</ul>
-
-<h3>Strategies</h3>
-<table class="t">
-  <tr><th>Strategy</th><th>How</th><th>Good for</th></tr>
-  <tr><td><b>Fixed-size</b></td><td>every N tokens, with overlap</td><td>quick baseline, uniform text</td></tr>
-  <tr><td><b>Recursive</b></td><td>split on the largest separator that fits (headings → paragraphs → sentences → words)</td><td>a strong general default</td></tr>
-  <tr><td><b>Structure-aware</b></td><td>follow document structure: sections, lists, tables, slides, rows</td><td>manuals, policies, contracts — anything with headings</td></tr>
-  <tr><td><b>Semantic</b></td><td>split where embedding similarity between neighbouring sentences drops</td><td>long unstructured prose; more compute</td></tr>
-  <tr><td><b>Parent-child</b> (small-to-big)</td><td>embed small child chunks for precise matching; give the LLM the larger parent section</td><td>precise retrieval <i>and</i> enough context</td></tr>
-  <tr><td><b>Sentence window</b></td><td>embed single sentences; return them with neighbouring sentences</td><td>fact lookup in dense text</td></tr>
-  <tr><td><b>Late chunking</b></td><td>embed the whole document with a long-context model, then pool token vectors per chunk</td><td>keeping document context in each chunk vector</td></tr>
-</table>
-
-<h3>Give every chunk its context</h3>
-<p>A chunk like "The fee is ₹500 per month" is useless without knowing <i>which</i> fee. Two cheap, effective fixes:</p>
-<ul>
-  <li><b>Contextual chunk header</b>: prepend the title and section path before embedding — "Pricing guide › Enterprise plan › Support add-on: The fee is ₹500 per month."</li>
-  <li><b>Contextual retrieval</b>: a model writes one sentence situating each chunk within its document, and it is prepended before both embedding and BM25 indexing. Anthropic reported this cut failed retrievals by about half, and by about two thirds combined with reranking. It costs one LLM call per chunk at ingestion time.</li>
-</ul>
-
+<h2><span class="ix">4</span>Example: step by step</h2>
 <div class="demo">
   <h4>Try it: fixed-size chunking with overlap</h4>
-  <div class="hint">Words stand in for tokens here. Overlapping words are highlighted.</div>
+  <div class="hint">Words stand in for tokens here. The highlighted words are the overlap shared with the previous chunk.</div>
   <textarea id="txt">Employees may carry over up to five days of unused annual leave into the next year. Carried-over days must be used by March 31. Requests to carry over more than five days need approval from a department head. Sick leave does not carry over. Employees who leave the company are paid for unused annual leave, but not for unused sick leave. Part-time employees receive leave in proportion to their contracted hours.</textarea>
   <label>chunk size (words) <input type="number" id="size" value="25" min="5" max="200"></label>
   <label>overlap (words) <input type="number" id="ov" value="5" min="0" max="100"></label>
   <div class="out" id="chunks"></div>
 </div>
-
-<h2><span class="ix">4</span>How it works: choosing settings</h2>
+<h3>How to choose the chunk size</h3>
 <table class="t">
-  <tr><th>Content</th><th>Starting point</th></tr>
-  <tr><td>FAQ, short factual answers</td><td>150–300 tokens, small overlap, or one chunk per Q&amp;A pair</td></tr>
-  <tr><td>Policies, manuals (headed sections)</td><td>structure-aware, 300–800 tokens, parent-child for long sections</td></tr>
-  <tr><td>Contracts and legal text</td><td>by clause or section; keep numbering in the header</td></tr>
-  <tr><td>Tables</td><td>whole table if small; row groups with repeated headers if large</td></tr>
-  <tr><td>Code</td><td>by function or class (syntax-aware splitters)</td></tr>
-  <tr><td>Chat logs and emails</td><td>by message or thread, with sender and date metadata</td></tr>
+  <tr><th>Content</th><th>Good starting point</th></tr>
+  <tr><td>FAQ, short facts</td><td>150–300 tokens, or one chunk per question-and-answer pair</td></tr>
+  <tr><td>Policies, manuals</td><td>by section, 300–800 tokens; parent-child for long sections</td></tr>
+  <tr><td>Contracts</td><td>one clause per chunk, with the clause number in the header</td></tr>
+  <tr><td>Tables</td><td>a whole small table, or groups of rows with the header repeated</td></tr>
+  <tr><td>Code</td><td>one function or class per chunk</td></tr>
 </table>
-<p>Typical overlap is <b>10–20%</b>. Overlap protects sentences that cross a boundary, but too much overlap fills the top-k with near-duplicates.</p>
-<div class="callout real"><b>Test, don't guess</b>Build 50–100 evaluation questions with known answer locations. Compare recall@k (lesson 20) for 2–3 chunk settings. The best size depends on your documents and questions.</div>
+<div class="remember"><b>Remember</b>
+<p>There is no universal best size. Try 2–3 settings on your evaluation questions and compare <b>recall@k</b> (lesson 20).</p></div>
 
-<h2><span class="ix">5</span>In the real world</h2>
-<ul>
-  <li>Measure chunk size in <b>tokens of the embedding model</b>, and keep chunks under its limit.</li>
-  <li>Never split inside a table row, a code block or a numbered clause.</li>
-  <li>Store for every chunk: document version, chunk index, pages, section path, token count and content hash. Keep parent and neighbour links too.</li>
-  <li><b>Deterministic chunk IDs</b> (hash of version, pipeline version, index and content) make re-runs idempotent.</li>
-  <li>Validate chunks: drop empty, boilerplate-only or duplicate chunks; flag oversized ones.</li>
-</ul>
+<h2><span class="ix">5</span>Important terms</h2>
+<div class="gloss">
+  <div><b>Chunk</b><p>A piece of a document that is embedded, searched and cited.</p></div>
+  <div><b>Chunk size</b><p>How long each piece is, measured in tokens of the embedding model.</p></div>
+  <div><b>Overlap</b><p>Text shared by neighbouring chunks, so a sentence on the boundary isn't lost.</p></div>
+  <div><b>Contextual chunk header</b><p>The title and section path added to the start of a chunk.</p></div>
+  <div><b>Parent-child chunking</b><p>Search with small chunks; give the LLM the bigger parent section.</p></div>
+  <div><b>Contextual retrieval</b><p>An LLM writes one sentence explaining where a chunk fits in its document, added before indexing.</p></div>
+  <div><b>Semantic chunking</b><p>Split where the meaning changes, found by comparing neighbouring sentences.</p></div>
+  <div><b>Late chunking</b><p>Embed the whole document first, then make one vector per chunk, so each chunk keeps document context.</p></div>
+</div>
 
-<h2><span class="ix">6</span>Common mistakes</h2>
-<ul>
-  <li>One fixed size for every document type.</li>
-  <li>Chunks without context, full of "this", "it" and "the above".</li>
-  <li>Huge overlap that returns three copies of the same text.</li>
-  <li>Changing chunking without re-running the evaluation set.</li>
-</ul>
+<h2><span class="ix">6</span>Types and comparison</h2>
+<table class="t">
+  <tr><th>Strategy</th><th>How it works</th><th>Good for</th></tr>
+  <tr><td><b>Fixed-size</b></td><td>every N tokens, with some overlap</td><td>a quick baseline</td></tr>
+  <tr><td><b>Recursive</b></td><td>split on the biggest separator that fits: headings → paragraphs → sentences → words</td><td>a strong default for most text</td></tr>
+  <tr><td><b>Structure-aware</b></td><td>follow the document's own sections, clauses, slides, table rows</td><td>policies, manuals, contracts</td></tr>
+  <tr><td><b>Semantic</b></td><td>split where the topic changes</td><td>long text without headings</td></tr>
+  <tr><td><b>Parent-child</b></td><td>search small chunks, return the parent section</td><td>precise search with enough context</td></tr>
+  <tr><td><b>Sentence window</b></td><td>search single sentences, return them with their neighbours</td><td>fact lookups in dense text</td></tr>
+</table>
+<table class="t">
+  <tr><th></th><th>Small chunks (100–200 tokens)</th><th>Large chunks (800–1,500 tokens)</th></tr>
+  <tr><td><b>Search precision</b></td><td>high</td><td>lower (mixed topics)</td></tr>
+  <tr><td><b>Context for the LLM</b></td><td>may be missing</td><td>plenty</td></tr>
+  <tr><td><b>Number of vectors</b></td><td>many (more storage)</td><td>few</td></tr>
+  <tr><td><b>Best fix</b></td><td colspan="2"><b>parent-child</b>: small for search, large for the answer</td></tr>
+</table>
 
-<h2><span class="ix">7</span>In our platform</h2>
-<div class="platform"><h4>Where this lives</h4><ul>
-  <li>Celery <b>Stage 3</b>: chunk + provenance → chunk quality checks → persist canonical chunks.</li>
-  <li><code>chunks</code> (text, <code>chunk_index</code>, <code>token_count</code>, pages, <code>section_path</code>, <code>parent_chunk_id</code>, <code>content_hash</code>, <code>pipeline_version_id</code>) and <code>chunk_relationships</code> (parent-child, adjacent).</li>
-  <li>The chunker and its settings come from <code>pipeline_steps.config_json</code> — e.g. <code>{"chunk_size": 800, "chunk_overlap": 120, "preserve_tables": true, "parent_child": true}</code>.</li>
+<h2><span class="ix">7</span>Advantages and limitations</h2>
+<div class="pc">
+  <div class="pro"><h4>Good chunking gives you</h4><ul>
+    <li>Precise search matches</li>
+    <li>Better use of the context window</li>
+    <li>Exact citations (section and page)</li>
+    <li>Chunks that fit the embedding model's limit</li>
+  </ul></div>
+  <div class="con"><h4>Common mistakes</h4><ul>
+    <li>Measuring size in characters instead of tokens</li>
+    <li>Splitting inside a table row or a clause</li>
+    <li>Too much overlap → near-duplicate results</li>
+    <li>Chunks without a title lose their meaning</li>
+  </ul></div>
+</div>
+
+<h2><span class="ix">8</span>Where is it used?</h2>
+<div class="uses">
+  <div><b>Every RAG system</b>the step between parsing and embedding</div>
+  <div><b>Contracts</b>one clause per chunk</div>
+  <div><b>Manuals</b>one procedure per chunk</div>
+  <div><b>Code search</b>one function per chunk</div>
+  <div><b>Spreadsheets</b>row groups with headers</div>
+  <div><b>Chat history memory</b>split long conversations</div>
+</div>
+<div class="example"><b>Real example: contextual chunk headers</b>
+<p>Chunk text: "The fee is ₹500 per month." Alone, it matches any question about any fee. With a header — "<b>Pricing Guide › Enterprise plan › Support add-on:</b> The fee is ₹500 per month." — it now matches "How much is Enterprise support?". Anthropic reported that adding generated context to chunks (contextual retrieval) cut failed retrievals by about half, and by about two thirds together with reranking.</p></div>
+<div class="platform"><h4>In our platform</h4><ul>
+  <li>Celery stage 3: chunk + provenance → chunk quality checks → save canonical chunks.</li>
+  <li><code>chunks</code> stores text, <code>chunk_index</code>, <code>token_count</code>, pages, <code>section_path</code> and <code>parent_chunk_id</code>; <code>chunk_relationships</code> stores parent-child and neighbour links.</li>
+  <li>Settings come from configuration: <code>{"chunk_size": 800, "chunk_overlap": 120, "preserve_tables": true, "parent_child": true}</code>.</li>
 </ul></div>
 
-<h2><span class="ix">8</span>Check yourself</h2>
-<details class="q"><summary>What problem does parent-child chunking solve?</summary><div>Small chunks match queries precisely but lack context; large chunks have context but match poorly. Parent-child retrieves with small chunks and gives the LLM the larger parent section.</div></details>
-<details class="q"><summary>Why prepend the title and section path to a chunk before embedding?</summary><div>It adds the missing context ("which plan, which policy") to both the vector and the keywords, so the chunk matches questions that name the topic.</div></details>
-<details class="q"><summary>Why can large overlap hurt?</summary><div>Neighbouring chunks become near-duplicates, crowd the top-k results and waste the context budget.</div></details>
-
-<h2><span class="ix">9</span>Key terms · Go deeper</h2>
-<div class="terms"><span><b>chunk</b></span><span><b>overlap</b></span><span><b>recursive splitting</b></span><span><b>structure-aware</b></span><span><b>semantic chunking</b></span><span><b>parent-child</b></span><span><b>late chunking</b></span><span><b>contextual retrieval</b></span></div>
-<ul class="refs">
-  <li>Anthropic — <a href="https://www.anthropic.com/news/contextual-retrieval">Introducing Contextual Retrieval</a></li>
-  <li>Günther et al. — <a href="https://arxiv.org/abs/2409.04701">Late Chunking</a></li>
-  <li>Pinecone — <a href="https://www.pinecone.io/learn/chunking-strategies/">Chunking strategies for LLM applications</a></li>
-</ul>
+<h2><span class="ix">9</span>How to explain it in an interview</h2>
+<div class="script"><b>Your 1-minute answer</b>
+<p><span class="part">Definition</span>Chunking is the process of splitting documents into smaller, self-contained pieces before they are embedded and indexed.</p>
+<p><span class="part">Why</span>Embedding models have token limits, and small focused chunks give more precise matches and use the context window better than whole documents.</p>
+<p><span class="part">How</span>I start with structure-aware chunking that follows headings, clauses and tables, split long sections recursively to about 300–800 tokens with 10–20% overlap, add the title and section path as a header, and often use parent-child chunking: search small chunks, send the parent section to the LLM.</p>
+<p><span class="part">Validation</span>There is no universal best size, so I compare two or three settings on an evaluation set using recall@k before choosing.</p></div>
+<div class="trap">
+  <div class="no"><b>Don't say</b>"512 tokens is always the best chunk size."</div>
+  <div class="yes"><b>Say instead</b>"It depends on the documents and questions. I start from the structure and test sizes on an evaluation set."</div>
+  <div class="no"><b>Don't say</b>"More overlap is always safer."</div>
+  <div class="yes"><b>Say instead</b>"10–20% is typical. Too much overlap creates near-duplicates that crowd the top results."</div>
+  <div class="no"><b>Don't say</b>"We split by characters."</div>
+  <div class="yes"><b>Say instead</b>"We measure in tokens of the embedding model and never split inside a table row or a clause."</div>
+</div>
 
 <script>
 (function () {
@@ -116,8 +176,7 @@
     const step = size - ov, out = [];
     for (let i = 0; i < words.length; i += step) {
       const part = words.slice(i, i + size);
-      const head = i > 0 ? part.slice(0, ov) : [];
-      const rest = i > 0 ? part.slice(ov) : part;
+      const head = i > 0 ? part.slice(0, ov) : [], rest = i > 0 ? part.slice(ov) : part;
       out.push(`<div class="chunk"><b>#${out.length + 1}</b> (${part.length} words) ${head.length ? `<span class="ov">${head.join(" ")}</span> ` : ""}${rest.join(" ")}</div>`);
       if (i + size >= words.length) break;
     }

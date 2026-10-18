@@ -9,110 +9,149 @@
 <body data-lesson="02">
 <main><article class="content">
 
-<h2><span class="ix">1</span>What you will learn</h2>
-<ul>
-  <li>What a token is, and how subword tokenizers (BPE) split text.</li>
-  <li>Why token counts — not characters or words — set cost, speed and limits.</li>
-  <li>How to budget a context window for RAG.</li>
-  <li>The token limits of embedding models, and why they matter for chunking.</li>
-</ul>
+<h2><span class="ix">1</span>What is a token?</h2>
+<div class="oneline" data-def><small>Interview answer — say this first</small></div>
+<div class="simple"><b>In simple words</b>
+<p>A model does not read words or letters. It reads small pieces of text called <b>tokens</b>. Common words are one token; rare or long words are split into a few tokens. Tokenization is the step that cuts the text into these pieces and gives each piece a number.</p></div>
 
-<h2><span class="ix">2</span>Why it matters</h2>
-<p>Models never see letters or words, only token IDs. Context limits, chunk sizes, latency and cost are all measured in tokens. If you size things in characters and the model counts tokens, text gets <b>silently cut off</b> and answers get worse without any error message.</p>
+<h2><span class="ix">2</span>Why do we need tokens?</h2>
+<p>A neural network can only work with numbers, so text must be turned into numbers first. There are three ways to do it:</p>
+<div class="gloss">
+  <div><b>One number per word</b><p>The list of all words would be endless: names, spelling mistakes, new words, code. Any word not in the list cannot be read.</p></div>
+  <div><b>One number per letter</b><p>Every text becomes very long, so the model is slow and can see much less text at once.</p></div>
+  <div style="grid-column: 1 / -1"><b>One number per sub-word piece (tokens) ✓</b><p>The balance. A fixed list of about 32,000–200,000 pieces can build <i>any</i> text, and common words still need only one piece. This is what every modern LLM uses.</p></div>
+</div>
+<div class="remember"><b>Remember — the rule of thumb</b>
+<p>In English, <b>1 token ≈ 4 characters ≈ ¾ of a word</b>. So 1,000 words ≈ 1,300 tokens.</p></div>
 
-<h2><span class="ix">3</span>Core ideas</h2>
-<h3>A token is a piece of text from a fixed vocabulary</h3>
-<p>A tokenizer has a vocabulary of roughly 32,000–200,000 pieces. Common words are one token; rare words are split into several pieces:</p>
-<table class="t">
-  <tr><th>Text</th><th>Possible tokens</th><th>Count</th></tr>
-  <tr><td>the</td><td><code>the</code></td><td>1</td></tr>
-  <tr><td>unbelievable</td><td><code>un</code> <code>believ</code> <code>able</code></td><td>3</td></tr>
-  <tr><td>" Paris" (with space)</td><td><code>␣Paris</code> — the space is part of the token</td><td>1</td></tr>
-  <tr><td>2026-10-18</td><td><code>202</code> <code>6</code> <code>-</code> <code>10</code> <code>-</code> <code>18</code></td><td>~6</td></tr>
-  <tr><td>INV-48213-A</td><td>several odd pieces</td><td>5–8</td></tr>
-</table>
-<p>Exact splits depend on the tokenizer. Every model family has its own, so <b>always count with the tokenizer of the model you use</b>.</p>
+<h2><span class="ix">3</span>How does tokenization work?</h2>
+<div class="stepcards">
+  <div class="sc"><span class="num">1</span><div><h4>Cut the text into pieces</h4>
+    <p>The <b>tokenizer</b> splits the text into pieces that exist in its fixed list, called the <b>vocabulary</b>. The space before a word is usually part of the token.</p>
+    <div class="eg"><b>Example:</b> "Unbelievable prices!" → <code>Un</code> <code>believ</code> <code>able</code> <code>␣prices</code> <code>!</code></div></div></div>
+  <div class="sc"><span class="num">2</span><div><h4>Replace each piece with its number</h4>
+    <p>Every token in the vocabulary has a fixed number called a <b>token ID</b>. The model only ever sees these numbers.</p>
+    <div class="eg"><b>Example:</b> <code>Un</code> <code>believ</code> <code>able</code> <code>␣prices</code> <code>!</code> → [1844, 32291, 481, 7729, 0]</div></div></div>
+  <div class="sc"><span class="num">3</span><div><h4>The model reads the IDs and predicts the next ID</h4>
+    <p>The IDs go into the model (lesson 01). The model's output is also a token ID.</p></div></div>
+  <div class="sc"><span class="num">4</span><div><h4>Turn the output IDs back into text</h4>
+    <p>The tokenizer looks up each output ID and joins the pieces back into readable text. This is called <b>decoding</b>.</p></div></div>
+</div>
+<div class="pic">
+  <div class="chain">
+    <div class="c">Text<small>"Unbelievable prices!"</small></div>
+    <div class="c a">Tokenizer<small>uses the vocabulary</small></div>
+    <div class="c">Tokens<small>Un · believ · able · ␣prices · !</small></div>
+    <div class="c b">Token IDs<small>[1844, 32291, 481, 7729, 0]</small></div>
+    <div class="c c3">Model<small>works only with numbers</small></div>
+  </div>
+</div>
+<p class="cap">Text → pieces → numbers. Every model family has its <b>own</b> tokenizer and vocabulary.</p>
 
-<h3>How BPE builds the vocabulary</h3>
+<h3>How is the vocabulary built? (BPE)</h3>
+<p>Most LLMs build their vocabulary with <b>BPE (Byte-Pair Encoding)</b>. The idea: start with single letters and keep joining the pair that appears most often.</p>
+<div class="example"><b>Example: learning from the words "low", "lower", "lowest"</b>
 <ol class="steps">
-  <li>Start with single bytes or characters.</li>
-  <li>Count which adjacent pair appears most often in the training text (for example <code>t</code>+<code>h</code>).</li>
-  <li>Merge that pair into a new token (<code>th</code>), and repeat thousands of times (<code>th</code>+<code>e</code> → <code>the</code>, …).</li>
-  <li>Stop when the vocabulary reaches its target size.</li>
-</ol>
-<p>Variants include byte-level BPE (GPT-style, tiktoken), SentencePiece (Llama, Gemma) and WordPiece (BERT-style encoders). Byte-level tokenizers can encode any text; nothing is ever "unknown".</p>
+  <li>Start with single letters: <code>l o w</code>, <code>l o w e r</code>, <code>l o w e s t</code>.</li>
+  <li>The pair <code>l</code>+<code>o</code> appears most often, so join it into a new token <code>lo</code>.</li>
+  <li>Now <code>lo</code>+<code>w</code> is the most common pair, so join it into <code>low</code>. "low" is now one token.</li>
+  <li>Repeat this thousands of times (<code>e</code>+<code>r</code> → <code>er</code>, …) until the vocabulary reaches its target size.</li>
+  <li>To tokenize new text later, apply the same joins in the same order.</li>
+</ol></div>
 
-<h3>Rules of thumb</h3>
-<ul>
-  <li>English: about <b>4 characters</b> or <b>0.75 words</b> per token. 1,000 words ≈ 1,300 tokens.</li>
-  <li>Many other languages — including Tamil, Hindi and other Indic scripts — need <b>2–4× more tokens</b> for the same meaning with many tokenizers. That means more cost, slower answers and less room in the context.</li>
-  <li>Numbers, IDs, code and URLs tokenize into many small pieces. This is one reason models are weak at exact arithmetic and long identifiers.</li>
-</ul>
-
-<h2><span class="ix">4</span>How it works in an application</h2>
-<h3>Special tokens and chat templates</h3>
-<p>Instruct models expect a specific <b>chat template</b> made of special tokens that mark roles, for example <code>&lt;|im_start|&gt;system … &lt;|im_end|&gt;</code>. Serving tools (Ollama, vLLM) read the template from the model files and apply it for you. A wrong template makes a good model behave badly.</p>
-
-<h3>Input tokens vs output tokens</h3>
-<ul>
-  <li><b>Prefill</b>: all input tokens are processed in parallel. Fast per token.</li>
-  <li><b>Decode</b>: output tokens are produced one at a time. Slow per token.</li>
-</ul>
-<p>So <b>long answers cost more time than long prompts</b>. Output tokens usually dominate latency.</p>
-
-<h3>Budgeting a context window for RAG</h3>
+<h2><span class="ix">4</span>Example: step by step</h2>
+<h3>Counting tokens for a RAG prompt</h3>
+<p>A model has a context window of 8,000 tokens. Input and output must both fit. Here is a typical budget:</p>
 <table class="t">
-  <tr><th>Part</th><th>Tokens</th></tr>
-  <tr><td>System prompt + rules</td><td>400</td></tr>
-  <tr><td>User question (+ short chat history)</td><td>300</td></tr>
-  <tr><td>Retrieved context: 6 chunks × ~500</td><td>3,000</td></tr>
-  <tr><td><b>Reserved for the answer</b></td><td>800</td></tr>
-  <tr><td>Total (fits an 8K window with headroom)</td><td><b>4,500</b></td></tr>
+  <tr><th>Part of the prompt</th><th>Tokens</th></tr>
+  <tr><td>System rules ("answer only from the sources…")</td><td>400</td></tr>
+  <tr><td>User question + short chat history</td><td>300</td></tr>
+  <tr><td>6 retrieved chunks × 500 tokens</td><td>3,000</td></tr>
+  <tr><td><b>Space kept free for the answer</b></td><td>800</td></tr>
+  <tr><td><b>Total</b></td><td><b>4,500</b> — fits, with room to spare</td></tr>
+</table>
+<h3>The same meaning, different token counts</h3>
+<table class="t">
+  <tr><th>Text</th><th>Approximate tokens</th><th>Why</th></tr>
+  <tr><td>"Leave policy" (English)</td><td>2</td><td>common English words are single tokens</td></tr>
+  <tr><td>The same phrase in Tamil or Hindi</td><td>6–10</td><td>the tokenizer saw less of these languages, so it uses smaller pieces</td></tr>
+  <tr><td>"INV-2026-48213"</td><td>7–9</td><td>numbers and codes split into many odd pieces</td></tr>
+</table>
+<div class="remember"><b>Remember</b>
+<p>Non-English text often needs <b>2–4× more tokens</b> for the same meaning. That means more cost, slower answers and less space in the context window.</p></div>
+
+<h2><span class="ix">5</span>Important terms</h2>
+<div class="gloss">
+  <div><b>Vocabulary</b><p>The fixed list of all tokens a model knows. Usually 32,000 to 200,000 tokens.</p></div>
+  <div><b>Token ID</b><p>The number given to a token in the vocabulary. The model works only with these IDs.</p></div>
+  <div><b>Tokenizer</b><p>The tool that turns text into token IDs and turns IDs back into text.</p></div>
+  <div><b>BPE (Byte-Pair Encoding)</b><p>A way to build the vocabulary by repeatedly joining the most frequent pair of pieces.</p></div>
+  <div><b>Special tokens</b><p>Control tokens with a special meaning, such as "start of text", "end of text" or "this is the system message".</p></div>
+  <div><b>Chat template</b><p>The exact format, with special tokens, that a chat model expects for system, user and assistant messages.</p></div>
+  <div><b>Prefill and decode</b><p>Prefill reads all input tokens at once (fast). Decode writes output tokens one by one (slow).</p></div>
+  <div><b>Truncation</b><p>Cutting off text that is longer than a model's token limit. It often happens silently.</p></div>
+</div>
+
+<h2><span class="ix">6</span>Types and comparison</h2>
+<table class="t">
+  <tr><th>Tokenizer type</th><th>How it works</th><th>Used by</th></tr>
+  <tr><td><b>Word-level</b></td><td>one token per word</td><td>old NLP systems; fails on new words</td></tr>
+  <tr><td><b>Character-level</b></td><td>one token per letter</td><td>rarely used; texts become too long</td></tr>
+  <tr><td><b>BPE (byte-level)</b></td><td>joins frequent byte pairs; can write any text</td><td>GPT-style models, Llama 3, Qwen</td></tr>
+  <tr><td><b>SentencePiece</b></td><td>BPE or "unigram" on raw text, spaces included</td><td>Gemma, T5, many multilingual models</td></tr>
+  <tr><td><b>WordPiece</b></td><td>similar joins, chosen by likelihood</td><td>BERT-style models (embedders, rerankers)</td></tr>
 </table>
 
-<h3>Count tokens properly</h3>
+<h2><span class="ix">7</span>Advantages and limitations</h2>
+<div class="pc">
+  <div class="pro"><h4>Advantages of sub-word tokens</h4><ul>
+    <li>Can represent any text: names, typos, code, emojis</li>
+    <li>Small, fixed vocabulary</li>
+    <li>Common words still need just one token</li>
+    <li>No "unknown word" problem with byte-level BPE</li>
+  </ul></div>
+  <div class="con"><h4>Limitations</h4><ul>
+    <li>Non-English languages need more tokens</li>
+    <li>Numbers, dates and IDs split into odd pieces, so exact maths is hard</li>
+    <li>Every model has a different tokenizer, so counts differ</li>
+    <li>Text over a token limit is cut off silently</li>
+  </ul></div>
+</div>
+
+<h2><span class="ix">8</span>Where do tokens matter?</h2>
+<div class="uses">
+  <div><b>Cost</b>APIs charge per input and output token; GPUs spend time on every token</div>
+  <div><b>Context limit</b>the context window (e.g. 8K or 128K) holds input + output together</div>
+  <div><b>Speed</b>output tokens are written one by one, so long answers are the slowest part</div>
+  <div><b>Chunk size</b>embedding models have token limits, often 512 or 8,192</div>
+  <div><b>Multilingual apps</b>Indian languages use more tokens, so budgets must be bigger</div>
+  <div><b>Rate limits</b>providers limit tokens per minute</div>
+</div>
+<div class="example"><b>Real example: the silent truncation bug</b>
+<p>A team sets the chunk size to "2,000 characters". Their embedding model can only read 512 tokens. English chunks are about 450 tokens and fit. But Tamil chunks are about 1,100 tokens, so more than half of each Tamil chunk is never embedded, and questions about those parts find nothing. <b>The fix:</b> measure chunk size in tokens, using the embedding model's own tokenizer.</p></div>
 <pre><code>from transformers import AutoTokenizer
-
-tok = AutoTokenizer.from_pretrained("path/to/local/model")   # same model you serve
-n = len(tok.encode(chunk_text, add_special_tokens=False))
-assert n &lt;= 512, "chunk too long for the embedding model"</code></pre>
-
-<h2><span class="ix">5</span>In the real world</h2>
-<ul>
-  <li><b>Embedding models have their own limits</b>, often 512 or 8,192 tokens. Text past the limit is usually <b>truncated silently</b> — the end of a chunk simply isn't embedded.</li>
-  <li>Configure chunk sizes <b>in tokens</b> of the embedding model, not characters (lesson 11).</li>
-  <li>Record token usage per request: it explains latency and cost, and catches runaway prompts.</li>
-  <li>Long contexts are not free: more tokens means slower prefill, more GPU memory (KV cache, lesson 04), and often lower answer quality (lesson 18).</li>
-</ul>
-
-<h2><span class="ix">6</span>Common mistakes</h2>
-<ul>
-  <li>Estimating with <code>len(text) / 4</code> for hard limits. Fine for rough planning, wrong for enforcement.</li>
-  <li>Not reserving room for the answer, so it gets cut off mid-sentence.</li>
-  <li>Measuring chunks in characters while the embedder truncates at 512 tokens.</li>
-  <li>Forgetting that multilingual text needs more tokens per sentence.</li>
-</ul>
-
-<h2><span class="ix">7</span>In our platform</h2>
-<div class="platform"><h4>Where this lives</h4><ul>
-  <li><code>chunks.token_count</code> stores the real size of every chunk.</li>
-  <li>The chunker config (<code>chunk_size</code>, <code>chunk_overlap</code> in <code>pipeline_steps.config_json</code>) should be measured in embedder tokens.</li>
-  <li>The online flow's <b>Context budget &amp; source validation</b> step fits chunks into the window and reserves output tokens.</li>
-  <li><code>answer_records.token_usage_json</code> and Langfuse spans record prompt and completion tokens.</li>
+tok = AutoTokenizer.from_pretrained("path/to/local/embedding-model")
+n_tokens = len(tok.encode(chunk_text, add_special_tokens=False))</code></pre>
+<div class="platform"><h4>In our platform</h4><ul>
+  <li><code>chunks.token_count</code> stores the real token size of every chunk.</li>
+  <li>The <b>context budget</b> step fits chunks into the window and always keeps space for the answer.</li>
+  <li>Token usage for every answer is saved in <code>answer_records.token_usage_json</code> and in Langfuse.</li>
 </ul></div>
 
-<h2><span class="ix">8</span>Check yourself</h2>
-<details class="q"><summary>Why might a Tamil document cost more to process than an English one of the same length?</summary><div>Many tokenizers were trained mostly on English, so Indic scripts get split into more, smaller tokens. More tokens means more compute, more latency and less room in the context.</div></details>
-<details class="q"><summary>Why does answer length affect latency more than prompt length?</summary><div>Input tokens are processed in parallel (prefill). Output tokens are generated one by one (decode).</div></details>
-<details class="q"><summary>A chunk has 900 tokens and the embedding model's limit is 512. What happens?</summary><div>Usually the last ~388 tokens are silently dropped from the embedding. Questions about that part won't match the chunk.</div></details>
-
-<h2><span class="ix">9</span>Key terms · Go deeper</h2>
-<div class="terms"><span><b>token</b></span><span><b>vocabulary</b></span><span><b>BPE</b></span><span><b>SentencePiece</b></span><span><b>chat template</b></span><span><b>special tokens</b></span><span><b>prefill / decode</b></span><span><b>context budget</b></span><span><b>truncation</b></span></div>
-<ul class="refs">
-  <li>Sennrich et al. — <a href="https://arxiv.org/abs/1508.07909">Neural Machine Translation of Rare Words with Subword Units</a> (BPE)</li>
-  <li>Hugging Face LLM course — <a href="https://huggingface.co/learn/llm-course/chapter6/1">The tokenizers chapter</a></li>
-  <li><a href="https://tiktokenizer.vercel.app/">Tiktokenizer</a> — see how different tokenizers split your text</li>
-</ul>
+<h2><span class="ix">9</span>How to explain it in an interview</h2>
+<div class="script"><b>Your 1-minute answer</b>
+<p><span class="part">Definition</span>A token is the basic unit of text that a language model reads and generates, usually a word, part of a word or a punctuation mark. Tokenization splits text into these units using a fixed vocabulary and maps each one to a numeric ID.</p>
+<p><span class="part">How it works</span>Most models build their vocabulary with Byte-Pair Encoding, which starts from characters and repeatedly merges the most frequent pairs. In English, one token is about four characters, or three quarters of a word.</p>
+<p><span class="part">Why it matters</span>The context window, the cost and the speed are all measured in tokens. Output tokens are generated one by one, so long answers are slow, and embedding models silently cut off text above their token limit.</p>
+<p><span class="part">Practical tip</span>That is why I always count tokens with the tokenizer of the exact model I use, and I keep space in the context window for the answer.</p></div>
+<div class="trap">
+  <div class="no"><b>Don't say</b>"A token is a word."</div>
+  <div class="yes"><b>Say instead</b>"A token is a sub-word piece. On average it is about ¾ of an English word."</div>
+  <div class="no"><b>Don't say</b>"A long prompt is what makes responses slow."</div>
+  <div class="yes"><b>Say instead</b>"Output tokens are generated one by one, so answer length usually decides the latency."</div>
+  <div class="no"><b>Don't say</b>"All models use the same tokenizer."</div>
+  <div class="yes"><b>Say instead</b>"Each model family has its own. I count tokens with the tokenizer of the model I use."</div>
+</div>
 
 </article></main>
 <script src="assets/path.js"></script>

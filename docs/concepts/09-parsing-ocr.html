@@ -9,99 +9,155 @@
 <body data-lesson="09">
 <main><article class="content">
 
-<h2><span class="ix">1</span>What you will learn</h2>
-<ul>
-  <li>Why PDFs are hard: they store positioned glyphs, not paragraphs.</li>
-  <li>What parsers do: text, layout, reading order and tables. When to use PyMuPDF, Docling or a VLM.</li>
-  <li>When and how to run OCR (Tesseract, EasyOCR).</li>
-  <li>Quality checks and safety limits for parsing untrusted files.</li>
-</ul>
+<h2><span class="ix">1</span>What is document parsing and OCR?</h2>
+<div class="oneline" data-def><small>Interview answer — say this first</small></div>
+<div class="simple"><b>In simple words</b>
+<p><b>Parsing</b> means reading a file (PDF, Word, Excel, web page) and pulling out its text in the right order, together with its headings, tables and page numbers. <b>OCR</b> is used when the page is only a picture, like a scan: it "reads" the letters from the image.</p></div>
 
-<h2><span class="ix">2</span>Why it matters</h2>
-<p><b>Garbage in, garbage out.</b> If a table is flattened into a jumble of numbers, a two-column page is read across the columns, or a scanned page yields no text, no embedding model or LLM can recover. Parsing quality sets the ceiling for the whole system.</p>
+<h2><span class="ix">2</span>Why do we need it?</h2>
+<p>Every later step — chunking, embeddings, search, the LLM — works on the parsed text. If the parser mixes up two columns or turns a table into a jumble of numbers, <b>nothing later can fix it</b>. This is "garbage in, garbage out".</p>
+<div class="pc">
+  <div class="con"><h4>Bad parsing</h4><ul>
+    <li>Two columns read across as one line</li>
+    <li>Table becomes "Plan Basic Pro Price 500 900"</li>
+    <li>Scanned pages give empty text</li>
+    <li>Headers and footers repeated in every chunk</li>
+  </ul></div>
+  <div class="pro"><h4>Good parsing</h4><ul>
+    <li>Correct reading order</li>
+    <li>Tables kept as rows and columns</li>
+    <li>OCR only for scanned pages</li>
+    <li>Every piece has its page number and section</li>
+  </ul></div>
+</div>
+<div class="analogy"><b>Analogy: a PDF is a painting of a page</b>
+<p>A PDF doesn't store "paragraphs" or "tables". It stores instructions like "draw the letter <i>T</i> at position x=72, y=640". The parser must rebuild the reading order, columns and tables from these scattered letters. A <b>scanned</b> PDF is only a photo, so we need OCR to read the letters.</p></div>
 
-<h2><span class="ix">3</span>Core ideas</h2>
-<h3>File types</h3>
-<table class="t">
-  <tr><th>Type</th><th>Difficulty</th><th>Notes</th></tr>
-  <tr><td>TXT, Markdown, CSV, JSON, XML</td><td>easy</td><td>Structure is explicit. Keep headings, keys and rows.</td></tr>
-  <tr><td>HTML</td><td>medium</td><td>Strip navigation, ads and scripts; keep headings, lists and tables.</td></tr>
-  <tr><td>DOCX, PPTX, XLSX</td><td>medium</td><td>XML inside a zip. Headings, slides and sheets give natural structure.</td></tr>
-  <tr><td><b>PDF (born-digital)</b></td><td>hard</td><td>Text exists, but as positioned characters. Reading order and tables must be reconstructed.</td></tr>
-  <tr><td><b>PDF (scanned) / images</b></td><td>hardest</td><td>No text layer: needs OCR.</td></tr>
-</table>
+<h2><span class="ix">3</span>How does it work?</h2>
+<div class="stepcards">
+  <div class="sc"><span class="num">1</span><div><h4>Check the real file type</h4>
+    <p>Look at the file's content, not just its name, so a renamed program is not treated as a PDF. Reject files that are too big or encrypted.</p></div></div>
+  <div class="sc"><span class="num">2</span><div><h4>Extract the text layer quickly</h4>
+    <p>Digital PDFs contain real text. A fast tool like <b>PyMuPDF</b> reads it with its position on the page.</p></div></div>
+  <div class="sc"><span class="num">3</span><div><h4>Check each page: is there enough text?</h4>
+    <p>If a page gives almost no characters, it is probably a scan. Only those pages go to OCR.</p></div></div>
+  <div class="sc"><span class="num">4</span><div><h4>Run OCR on the pages that need it</h4>
+    <p>Render the page as an image at about 300 DPI and run OCR (<b>Tesseract</b> or <b>EasyOCR</b>).</p></div></div>
+  <div class="sc"><span class="num">5</span><div><h4>Analyse the layout</h4>
+    <p>A layout tool like <b>Docling</b> finds headings, paragraphs, lists and tables, and builds the correct reading order.</p></div></div>
+  <div class="sc"><span class="num">6</span><div><h4>Save structured output and check quality</h4>
+    <p>Save text as Markdown or JSON with page numbers and section paths. Check characters per page, OCR confidence and language.</p></div></div>
+</div>
+<div class="pic">
+  <div class="chain">
+    <div class="c">File</div>
+    <div class="c">Check type<small>by content</small></div>
+    <div class="c b">Fast text extraction<small>PyMuPDF</small></div>
+    <div class="c d">Enough text?<small>per page</small></div>
+    <div class="c e">If not: OCR<small>Tesseract / EasyOCR</small></div>
+    <div class="c a">Layout + tables<small>Docling</small></div>
+    <div class="c b">Structured output<small>+ page numbers</small></div>
+  </div>
+</div>
+<p class="cap">Fast extraction first; OCR only for the pages that need it.</p>
 
-<h3>Why PDFs are hard</h3>
-<ul>
-  <li>A PDF says "draw these glyphs at x, y". It has no notion of paragraphs, columns or tables.</li>
-  <li>Multi-column layouts, headers and footers, footnotes and side notes must be ordered correctly.</li>
-  <li>Tables are just text plus lines. The row and column structure has to be inferred.</li>
-  <li>Some fonts have no proper Unicode mapping, so "copyable" text comes out as garbage.</li>
-</ul>
+<h2><span class="ix">4</span>Example: step by step</h2>
+<div class="example"><b>A 20-page contract: 18 digital pages + 2 scanned signature pages</b>
+<ol class="steps">
+  <li>Check the file content: it really is a PDF.</li>
+  <li>PyMuPDF extracts text from all pages in under a second. Pages 19–20 return almost no characters.</li>
+  <li>Only pages 19–20 are turned into images at 300 DPI and sent to OCR.</li>
+  <li>Docling finds headings ("Clause 7 — Penalties"), paragraphs and a fee table, and puts them in reading order.</li>
+  <li>The fee table is kept as a Markdown table with its header row.</li>
+  <li>Output: structured text with a page number and section for every element, saved as an artifact.</li>
+</ol></div>
+<h3>Why tables need special care</h3>
+<p><b>Flattened:</b> "Plan Basic Pro Price 500 900 Users 5 20" — the model cannot tell which number belongs to which plan. <b>Kept as a table:</b></p>
+<pre><code>| Plan  | Price (₹) | Users |
+|-------|-----------|-------|
+| Basic | 500       | 5     |
+| Pro   | 900       | 20    |</code></pre>
+<div class="remember"><b>Remember</b>
+<p>For large tables, split them into groups of rows and <b>repeat the header row</b> in every chunk, so every number keeps its meaning.</p></div>
 
-<h2><span class="ix">4</span>How it works: tools and pipeline</h2>
-<div class="cards">
-  <div class="card"><h4>PyMuPDF</h4><p>Very fast text, block and word extraction with coordinates, plus images and page rendering. Good first pass and fallback.</p></div>
-  <div class="card"><h4>Docling</h4><p>Layout-analysis models find headings, paragraphs, lists, figures and tables. TableFormer reconstructs tables. Exports structured JSON or Markdown. Slower, but much better structure.</p></div>
-  <div class="card"><h4>OCR: Tesseract / EasyOCR</h4><p>Tesseract is classic, CPU-friendly and covers many languages (including Tamil and Hindi). EasyOCR is deep-learning based and uses a GPU if available. PaddleOCR is another strong option.</p></div>
-  <div class="card"><h4>VLM document parsers</h4><p>Vision-language models read page images directly, which helps with complex layouts. They are much slower and can hallucinate, so reserve them for hard pages.</p></div>
+<h2><span class="ix">5</span>Important terms</h2>
+<div class="gloss">
+  <div><b>Text layer</b><p>Real, selectable text inside a PDF. Scanned PDFs don't have one.</p></div>
+  <div><b>Born-digital PDF</b><p>A PDF created by software (Word, export), so it has a text layer.</p></div>
+  <div><b>OCR (Optical Character Recognition)</b><p>Software that reads letters from an image.</p></div>
+  <div><b>DPI</b><p>Image resolution. About 300 DPI works well for OCR.</p></div>
+  <div><b>Layout analysis</b><p>Finding headings, paragraphs, columns, tables and figures on a page.</p></div>
+  <div><b>Reading order</b><p>The correct order to read text blocks, for example down column 1, then column 2.</p></div>
+  <div><b>Table structure recognition</b><p>Rebuilding the rows and columns of a table.</p></div>
+  <div><b>Artifact</b><p>A saved intermediate output, such as the parser's JSON or OCR text.</p></div>
 </div>
 
-<ol class="steps">
-  <li><b>Detect type</b> from the content (magic bytes), not just the file extension.</li>
-  <li><b>Fast extract</b> (PyMuPDF): measure text quality per page.</li>
-  <li><b>Decide OCR per page</b>: no text layer, or text that is mostly invalid characters → render at about 300 DPI and OCR.</li>
-  <li><b>Layout and structure</b> (Docling): reading order, headings, section path, tables kept as tables.</li>
-  <li><b>Store artifacts</b> (parser JSON, OCR output, page images) and record parser name and version.</li>
-  <li><b>Quality checks</b> before chunking (see below).</li>
-</ol>
-
-<h3>Tables deserve special care</h3>
-<ul>
-  <li>Keep tables as Markdown or HTML tables, with the header row attached.</li>
-  <li>For large tables, chunk by groups of rows and <b>repeat the header</b> in each chunk.</li>
-  <li>Optionally store a one-line description ("Table 3: monthly fees by plan").</li>
-</ul>
-
-<h2><span class="ix">5</span>In the real world</h2>
+<h2><span class="ix">6</span>Types and comparison</h2>
+<h3>Parsing tools</h3>
 <table class="t">
-  <tr><th>Quality check</th><th>Flags</th></tr>
-  <tr><td>characters per page</td><td>empty or near-empty pages (OCR needed or failed)</td></tr>
-  <tr><td>share of valid letters</td><td>garbage from a broken font mapping</td></tr>
-  <tr><td>OCR confidence</td><td>blurry scans, handwriting, wrong language setting</td></tr>
-  <tr><td>language detection</td><td>wrong OCR language pack, mixed-language documents</td></tr>
-  <tr><td>repeated lines across pages</td><td>headers and footers to remove (lesson 10)</td></tr>
+  <tr><th>Tool</th><th>Strength</th><th>Weakness</th></tr>
+  <tr><td><b>PyMuPDF</b></td><td>very fast text and positions; can render pages as images</td><td>no deep layout or table understanding</td></tr>
+  <tr><td><b>Docling</b></td><td>layout models + table recognition; clean Markdown/JSON</td><td>slower and heavier</td></tr>
+  <tr><td><b>Tesseract</b></td><td>classic OCR, runs on CPU, many languages (incl. Tamil, Hindi)</td><td>weaker on complex layouts and poor scans</td></tr>
+  <tr><td><b>EasyOCR / PaddleOCR</b></td><td>deep-learning OCR, good accuracy, GPU support</td><td>needs more compute</td></tr>
+  <tr><td><b>Vision-language models</b></td><td>read page images directly; handle hard layouts</td><td>slow, costly, can invent text</td></tr>
 </table>
-<div class="callout bad"><b>Security: parsers handle untrusted input</b>Run parsing with limits: timeout, memory, page count, file size. Reject encrypted or oversized files, guard against zip bombs, never execute macros, and isolate workers. Malformed PDFs have exploited parser bugs before (lesson 23).</div>
+<h3>File types by difficulty</h3>
+<table class="t">
+  <tr><th>File type</th><th>Difficulty</th><th>Tip</th></tr>
+  <tr><td>TXT, Markdown, CSV, JSON, XML</td><td>easy</td><td>keep headings, keys and rows</td></tr>
+  <tr><td>HTML</td><td>medium</td><td>remove menus and ads; keep headings, lists and tables</td></tr>
+  <tr><td>DOCX, PPTX, XLSX</td><td>medium</td><td>use headings, slides and sheets as structure</td></tr>
+  <tr><td>PDF (digital)</td><td>hard</td><td>rebuild reading order and tables</td></tr>
+  <tr><td>PDF (scanned), images</td><td>hardest</td><td>OCR, then check confidence</td></tr>
+</table>
 
-<h2><span class="ix">6</span>Common mistakes</h2>
-<ul>
-  <li>OCR on everything: slow, and worse than the real text layer on born-digital pages.</li>
-  <li>OCR on nothing: scanned pages silently become empty documents.</li>
-  <li>Flattening tables into running text.</li>
-  <li>Dropping page numbers and section paths, so citations become impossible.</li>
-  <li>Not versioning parser output, so a parser upgrade can't be compared or rolled back.</li>
-</ul>
+<h2><span class="ix">7</span>Advantages and limitations</h2>
+<div class="pc">
+  <div class="pro"><h4>Good parsing gives you</h4><ul>
+    <li>Better chunks, better search, better answers</li>
+    <li>Correct page numbers for citations</li>
+    <li>Tables that the LLM can read correctly</li>
+    <li>Scanned documents become searchable</li>
+  </ul></div>
+  <div class="con"><h4>Challenges</h4><ul>
+    <li>Multi-column layouts and side notes</li>
+    <li>Complex or merged-cell tables</li>
+    <li>Poor-quality scans and handwriting</li>
+    <li>OCR is slow and less accurate than a text layer</li>
+    <li>Uploaded files can be malicious</li>
+  </ul></div>
+</div>
+<div class="callout bad"><b>Security</b>Uploaded files are untrusted. Parse them with time, memory, page and size limits; reject encrypted or oversized files; never run macros; and run the parsing workers in isolation.</div>
 
-<h2><span class="ix">7</span>In our platform</h2>
-<div class="platform"><h4>Where this lives</h4><ul>
-  <li>Celery <b>Stage 1</b>: read the original from MinIO → Docling + PyMuPDF → "Text extraction sufficient?" → Tesseract or EasyOCR.</li>
-  <li><code>extracted_artifacts</code> (parser JSON, OCR output, page images in <code>rag-artifacts</code>) and <code>document_elements</code> (headings, paragraphs, tables, page numbers).</li>
-  <li>First-release formats: PDF, DOCX, XLSX, PPTX, TXT, Markdown, CSV, JSON, XML, HTML. Handwriting and diagrams come later.</li>
+<h2><span class="ix">8</span>Where is it used?</h2>
+<div class="uses">
+  <div><b>RAG ingestion</b>the first step for every uploaded document</div>
+  <div><b>Invoices and forms</b>read fields from scanned paperwork</div>
+  <div><b>Contracts</b>find clauses, keep clause numbers</div>
+  <div><b>Reports and manuals</b>keep headings and tables</div>
+  <div><b>Archives</b>make old scanned files searchable</div>
+  <div><b>Banking and insurance</b>KYC documents, claim forms</div>
+</div>
+<div class="platform"><h4>In our platform</h4><ul>
+  <li>Celery stage 1: read the original file from MinIO → Docling + PyMuPDF → "Text extraction sufficient?" → Tesseract or EasyOCR if not.</li>
+  <li>Outputs: <code>extracted_artifacts</code> (stored in MinIO) and <code>document_elements</code> (headings, paragraphs, tables, page numbers).</li>
 </ul></div>
 
-<h2><span class="ix">8</span>Check yourself</h2>
-<details class="q"><summary>How can you tell, per page, that OCR is needed?</summary><div>The page has no text layer, very few characters, or text that is mostly invalid or garbage characters. Render that page as an image and OCR it.</div></details>
-<details class="q"><summary>Why repeat the header row when splitting a large table into chunks?</summary><div>Without headers, a chunk of rows has no column meaning. Embeddings and the LLM can't tell what each number refers to.</div></details>
-<details class="q"><summary>Why record the parser name and version with each artifact?</summary><div>To reproduce results, compare parser upgrades on the evaluation set, and re-process only what changed.</div></details>
-
-<h2><span class="ix">9</span>Key terms · Go deeper</h2>
-<div class="terms"><span><b>text layer</b></span><span><b>layout analysis</b></span><span><b>reading order</b></span><span><b>OCR</b></span><span><b>DPI</b></span><span><b>table structure recognition</b></span><span><b>artifact</b></span><span><b>provenance</b></span></div>
-<ul class="refs">
-  <li><a href="https://github.com/docling-project/docling">Docling</a> · <a href="https://arxiv.org/abs/2408.09869">Docling technical report</a></li>
-  <li><a href="https://pymupdf.readthedocs.io/">PyMuPDF documentation</a></li>
-  <li><a href="https://github.com/tesseract-ocr/tesseract">Tesseract OCR</a> · <a href="https://github.com/JaidedAI/EasyOCR">EasyOCR</a></li>
-</ul>
+<h2><span class="ix">9</span>How to explain it in an interview</h2>
+<div class="script"><b>Your 1-minute answer</b>
+<p><span class="part">Definition</span>Document parsing is the process of extracting text and its structure — headings, paragraphs, tables and page numbers — from files such as PDFs, Word documents and web pages. When a page is only an image, OCR is used to recognize the characters.</p>
+<p><span class="part">How it works</span>I first check the real file type, extract the text layer quickly with PyMuPDF, and send only pages without enough text to OCR at about 300 DPI. A layout tool like Docling then rebuilds the reading order and table structure.</p>
+<p><span class="part">Example</span>Tables are kept as Markdown tables with the header repeated in each chunk, so a price stays connected to its plan.</p>
+<p><span class="part">Why it matters</span>Parsing quality sets the upper limit for RAG quality, so I measure it, store the parsed artifacts, and treat uploaded files as untrusted.</p></div>
+<div class="trap">
+  <div class="no"><b>Don't say</b>"We just run OCR on every PDF."</div>
+  <div class="yes"><b>Say instead</b>"We use the text layer when it exists and OCR only pages without usable text, because OCR is slower and less accurate."</div>
+  <div class="no"><b>Don't say</b>"Tables are just text."</div>
+  <div class="yes"><b>Say instead</b>"We keep tables as tables, with the header repeated in each chunk, so numbers keep their meaning."</div>
+  <div class="no"><b>Don't say</b>"Parsing is a solved problem."</div>
+  <div class="yes"><b>Say instead</b>"Parsing quality is often the biggest limit on RAG quality, so we measure it."</div>
+</div>
 
 </article></main>
 <script src="assets/path.js"></script>

@@ -1,0 +1,42 @@
+// Interview content for lesson 09. def: interview definition · revise: revision card ·
+// qa: questions (l: B basic · I intermediate · A advanced; a: model answer; k: key words; f: likely follow-up).
+window.QA = window.QA || {};
+window.QA["09"] = {
+  def: "<b>Document parsing</b> is the process of extracting text and its structure — headings, paragraphs, tables and page numbers — from files such as PDFs, Word documents, spreadsheets and web pages. When a page contains only an image of text, as in a scanned document, <b>OCR</b> (Optical Character Recognition) is used to recognize the characters. Because every later step depends on this output, parsing quality sets the upper limit for the quality of a RAG system.",
+  revise: [
+    "A PDF stores positioned characters, not paragraphs, so reading order, columns and tables must be reconstructed.",
+    "Use fast text extraction first (PyMuPDF) and apply OCR only to pages without usable text, at about 300 DPI.",
+    "Docling provides layout analysis and table recognition; Tesseract and EasyOCR provide OCR; VLM parsers handle very complex pages.",
+    "Keep tables as tables, repeat header rows in each chunk, and keep page numbers and section paths for citations.",
+    "Measure parsing quality (characters per page, OCR confidence, language) and parse untrusted files in isolated, resource-limited workers.",
+  ],
+  qa: [
+    { l: "B", q: "What is document parsing in a RAG system?",
+      a: "Document parsing is the first stage of ingestion, in which files such as PDFs, Word documents, spreadsheets and HTML pages are converted into clean text while preserving their structure — headings, lists, tables and page numbers. The parsed output is what the system later chunks and embeds, so the quality of parsing limits the quality of retrieval and answers.",
+      k: ["first ingestion stage", "files → structured text", "headings, tables, pages", "limits downstream quality"] },
+    { l: "B", q: "What is OCR, and when is it needed?",
+      a: "OCR, or Optical Character Recognition, is a technology that recognizes printed or handwritten characters in images and converts them into machine-readable text. It is needed for scanned documents, photographs and PDF pages that contain only images and no text layer. For born-digital PDFs, the existing text layer is used instead, because it is faster and more accurate than OCR.",
+      k: ["Optical Character Recognition", "images → text", "scanned pages", "no text layer", "prefer the text layer"] },
+    { l: "B", q: "Why are PDFs difficult to parse?",
+      a: "A PDF describes how to draw a page — individual characters placed at specific coordinates — rather than storing paragraphs, columns or tables. A parser therefore has to reconstruct the reading order, handle multi-column layouts, headers, footers and hyphenation, and rebuild tables from text fragments and lines. In addition, some PDFs use fonts without a proper character mapping, which turns extracted text into unreadable symbols.",
+      k: ["positioned characters", "reading order", "multi-column layouts", "tables from fragments", "font mapping"] },
+    { l: "I", q: "How do you handle tables when building a RAG system?",
+      a: "I detect tables with a layout or table-structure recognition model and store them in a structured format such as Markdown or HTML, including the header row. Small tables are kept as a single chunk, while large tables are divided into groups of rows with the header repeated in every chunk, often with a short caption such as 'Table 3: fees by plan'. Flattening a table into plain sentences destroys the relationship between values and their columns.",
+      k: ["table structure recognition", "Markdown / HTML", "header row", "split rows, repeat header", "caption"] },
+    { l: "I", q: "How do you decide which pages require OCR?",
+      a: "I first extract text quickly with a library such as PyMuPDF and evaluate each page separately. A page with very few characters, or with text consisting mostly of invalid symbols, is marked for OCR. Only those pages are rendered as images at about 300 DPI and processed by the OCR engine, which keeps ingestion fast and avoids replacing accurate digital text with less accurate OCR output.",
+      k: ["per-page evaluation", "character count", "invalid-character ratio", "300 DPI", "OCR only where needed"] },
+    { l: "I", q: "Which parsing tools would you use, and why?",
+      a: "I would use PyMuPDF for very fast text and coordinate extraction and for rendering pages; Docling when layout and tables matter, because its layout analysis and table recognition models produce clean structured output; and Tesseract or EasyOCR for scanned pages, selected according to the required languages and GPU availability. For exceptionally complex pages, a vision-language-model parser can be used, but it is slower and its output must be checked for hallucinated text.",
+      k: ["PyMuPDF — speed", "Docling — layout and tables", "Tesseract / EasyOCR — OCR", "VLM parser for hard pages"] },
+    { l: "I", q: "How do you measure parsing quality?",
+      a: "I combine automatic checks, manual review and downstream metrics. Automatically, I track characters per page, the ratio of valid characters, empty pages, OCR confidence, detected language and repeated lines. Manually, I compare a sample of each document type with the original. Most importantly, I measure retrieval metrics on the evaluation set before and after any parser change, and I store the parser name and version with every artifact so results remain comparable.",
+      k: ["characters per page", "OCR confidence", "language detection", "sample review", "retrieval metrics", "parser version"] },
+    { l: "A", q: "How do you handle multi-column layouts, headers and footers?",
+      a: "I use layout analysis to detect text blocks and their positions on the page, and then order the blocks column by column to restore the correct reading sequence. Headers and footers are detected as lines that repeat in the same position across many pages; they are removed from the content or kept only as metadata. Footnotes and side notes are retained but linked to their position so that they do not interrupt sentences.",
+      k: ["layout analysis", "column ordering", "repeated lines across pages", "footnotes kept separately"] },
+    { l: "A", q: "What security risks arise when parsing uploaded files, and how do you mitigate them?",
+      a: "Uploaded files are untrusted input. Malformed PDFs can exploit vulnerabilities in parsing libraries, compressed archives can expand into enormous files, Office documents can contain macros, and very large files can exhaust system resources. I would verify the real file type from its content, enforce size and page limits, run parsers in isolated workers with time and memory limits, never execute macros, reject encrypted files and keep parsing libraries up to date.",
+      k: ["untrusted input", "parser vulnerabilities", "decompression bombs", "macros", "isolation and limits", "patching"] },
+  ],
+};
