@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reranking</title>
+<link rel="stylesheet" href="assets/concepts.css">
+</head>
+<body data-lesson="17">
+<main><article class="content">
+
+<h2><span class="ix">1</span>What you will learn</h2>
+<ul>
+  <li>Two-stage retrieval: fast, broad recall first, then precise reranking.</li>
+  <li>Cross-encoders vs bi-encoders vs late interaction (ColBERT) vs LLM rerankers.</li>
+  <li>How many candidates to rerank, and what it costs.</li>
+  <li>MMR for diversity, and using reranker scores to decide when to abstain.</li>
+</ul>
+
+<h2><span class="ix">2</span>Why it matters</h2>
+<p>First-stage retrieval is tuned for speed over millions of chunks, so its top 5 are often only "related". A reranker reads each candidate <b>together with the question</b> and reorders them by actual relevance. It is usually the single biggest precision gain you can add. Better top-5 chunks mean better answers and fewer tokens.</p>
+
+<h2><span class="ix">3</span>Core ideas</h2>
+<div class="flow">
+  <span class="bx">corpus<small>millions of chunks</small></span><span class="ar">→</span>
+  <span class="bx">hybrid retrieval<small>top 50–100 · fast</small></span><span class="ar">→</span>
+  <span class="bx hl">reranker<small>top 5–10 · precise</small></span><span class="ar">→</span>
+  <span class="bx">prompt</span>
+</div>
+
+<table class="t">
+  <tr><th>Approach</th><th>How it scores</th><th>Quality</th><th>Cost</th></tr>
+  <tr><td><b>Bi-encoder</b> (embeddings)</td><td>query vector vs passage vector, computed separately</td><td>good</td><td>very low per query</td></tr>
+  <tr><td><b>Late interaction</b> (ColBERT)</td><td>token-level vectors; each query token finds its best-matching passage token (MaxSim)</td><td>better</td><td>more storage (many vectors per chunk)</td></tr>
+  <tr><td><b>Cross-encoder</b></td><td>reads "[query] [SEP] [passage]" jointly; full attention between them; outputs one relevance score</td><td>high</td><td>one forward pass per pair, at query time</td></tr>
+  <tr><td><b>LLM reranker</b></td><td>an LLM judges pairs or ranks a list</td><td>high, flexible</td><td>highest latency and cost</td></tr>
+</table>
+
+<h3>Why cross-encoders are better</h3>
+<p>Every query token can attend to every passage token (lesson 04). The model sees that "carry over" in the question matches "may be transferred to the following year" in the passage, and that the passage is about <i>sick</i> leave, not <i>annual</i> leave. Separate vectors can't make that comparison.</p>
+
+<h2><span class="ix">4</span>How it works in practice</h2>
+<ol class="steps">
+  <li>Take the fused top 30–50 candidates (lesson 16).</li>
+  <li>Build (question, chunk text) pairs. Truncate long chunks to the reranker's limit, often 512 tokens.</li>
+  <li>Score all pairs in <b>one batch</b> on GPU (tens of milliseconds) or CPU (hundreds of milliseconds or more).</li>
+  <li>Sort by score and keep the top 5–10, optionally applying MMR or parent expansion.</li>
+  <li>Check the best score against a <b>calibrated threshold</b>. If nothing is relevant enough, abstain (lesson 18).</li>
+</ol>
+
+<h3>MMR — maximal marginal relevance</h3>
+<pre><code>next = argmax over candidates d:  λ · rel(q, d) − (1 − λ) · max over selected s: sim(d, s)</code></pre>
+<p>MMR picks relevant chunks that are <b>not</b> near-duplicates of chunks already chosen. Use λ ≈ 0.5–0.8. It helps when the top results repeat the same paragraph from several versions or overlapping chunks.</p>
+
+<h2><span class="ix">5</span>In the real world</h2>
+<ul>
+  <li>Examples of open rerankers: <b>bge-reranker-v2-m3</b>, the <b>Qwen3-Reranker</b> family and <b>mxbai-rerank</b>. Check languages and license (some reranker families are non-commercial).</li>
+  <li><b>Candidate count is the main cost lever.</b> Reranking 100 pairs costs about twice as much as 50. Measure the recall gain per extra candidate.</li>
+  <li>The reranker can't recover a chunk that first-stage retrieval missed. Recall first, then precision.</li>
+  <li>Reranker scores are model-specific. Calibrate thresholds on your evaluation set, and re-calibrate when you change models.</li>
+  <li>Set a <b>timeout</b>. If reranking fails, fall back to the fused order rather than failing the request.</li>
+</ul>
+
+<h2><span class="ix">6</span>Common mistakes</h2>
+<ul>
+  <li>Reranking only the top 5 — there's nothing left to reorder.</li>
+  <li>Cutting chunks in the middle of the key sentence when truncating.</li>
+  <li>Reusing thresholds from a different reranker model.</li>
+  <li>Running the reranker on CPU with 200 candidates and wondering why answers take 8 seconds.</li>
+</ul>
+
+<h2><span class="ix">7</span>In our platform</h2>
+<div class="platform"><h4>Where this lives</h4><ul>
+  <li>Online "Cross-encoder reranker" → "optional MMR and parent expansion" → "Context assembly &amp; evidence check".</li>
+  <li><code>retrieval_definitions.reranker_config</code> (model, candidate count, top-n, threshold); <code>retrieval_results.reranker_score</code> per candidate.</li>
+  <li>The reranker model is a local encoder listed in <code>model_definitions</code> (type <code>reranker</code>).</li>
+</ul></div>
+
+<h2><span class="ix">8</span>Check yourself</h2>
+<details class="q"><summary>Why not use a cross-encoder for first-stage retrieval?</summary><div>It needs one forward pass per (query, chunk) pair at query time. Over millions of chunks that is far too slow, so it is only used on a small candidate set.</div></details>
+<details class="q"><summary>What problem does MMR solve?</summary><div>Redundancy: several near-identical chunks filling the top results. MMR trades a little relevance for diversity.</div></details>
+<details class="q"><summary>The correct chunk is rank 140 after fusion and you rerank the top 50. What happens?</summary><div>It is never reranked and never reaches the prompt. Fix recall first (chunking, query, more candidates) — the reranker can't fix it.</div></details>
+
+<h2><span class="ix">9</span>Key terms · Go deeper</h2>
+<div class="terms"><span><b>two-stage retrieval</b></span><span><b>cross-encoder</b></span><span><b>bi-encoder</b></span><span><b>late interaction</b></span><span><b>ColBERT / MaxSim</b></span><span><b>listwise reranking</b></span><span><b>MMR</b></span><span><b>score threshold</b></span></div>
+<ul class="refs">
+  <li>Nogueira &amp; Cho — <a href="https://arxiv.org/abs/1901.04085">Passage Re-ranking with BERT</a></li>
+  <li>Khattab &amp; Zaharia — <a href="https://arxiv.org/abs/2004.12832">ColBERT</a></li>
+  <li>Carbonell &amp; Goldstein — <a href="https://www.cs.cmu.edu/~jgc/publication/The_Use_MMR_Diversity_Based_LTMCS_1998.pdf">The Use of MMR for Diversity-Based Reranking</a></li>
+  <li><a href="https://sbert.net/docs/cross_encoder/usage/usage.html">Sentence Transformers — cross-encoder usage</a></li>
+</ul>
+
+</article></main>
+<script src="assets/path.js"></script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAG Learning Path</title>
+<link rel="stylesheet" href="assets/concepts.css">
+</head>
+<body data-page="index">
+<main>
+  <div class="path-hero">
+    <span class="stage-chip" style="background:var(--accent)">Learning path · start here</span>
+    <h1>From LLM basics to a production RAG system</h1>
+    <p class="lead">These lessons follow one order. Each one builds on the one before: how language models work, then the ingestion pipeline, then retrieval and grounded answers, then quality, safety and production. The examples come from the platform described in the <a href="../README.md">architecture docs</a>.</p>
+    <div class="meta"><span id="total-time"></span><span>Progress is saved in this browser</span></div>
+    <div class="path-actions">
+      <a class="btn" id="continue" href="01-how-llms-work.html">Start</a>
+      <a class="btn ghost" href="../images/01-system-architecture.png">See the system architecture</a>
+    </div>
+  </div>
+
+  <section class="stage-block">
+    <h2>How to use this path</h2>
+    <div class="cards" style="margin-bottom:0">
+      <div class="card"><h4>1 · Go in order</h4><p>Lessons depend on earlier ones. Lesson 04 (transformers) needs 02 and 03; lesson 16 (hybrid search) needs 12–14.</p></div>
+      <div class="card"><h4>2 · Same shape every time</h4><p>What you will learn → why it matters → core ideas → how it works → real-world practice → common mistakes → in our platform → check yourself → go deeper.</p></div>
+      <div class="card"><h4>3 · Test yourself</h4><p>Answer the "Check yourself" questions before opening the answers. If you can't, re-read that section.</p></div>
+      <div class="card"><h4>4 · Mark it learned</h4><p>Use the button at the bottom of each lesson. ← and → keys move between lessons.</p></div>
+    </div>
+  </section>
+
+  <div id="path"></div>
+
+  <section class="stage-block">
+    <h2>After the path</h2>
+    <div class="why">Use the architecture diagrams as the map of what you learned:</div>
+    <div class="lesson-list">
+      <a class="lesson-card" href="../src/01-system-architecture.html"><span class="n" style="background:#334155">A</span><span><span class="tt">System architecture</span><span class="sm" style="display:block">all components and how they connect</span></span><span class="st">diagram</span></a>
+      <a class="lesson-card" href="../src/04-ingestion-flow.html"><span class="n" style="background:#15803d">B</span><span><span class="tt">Ingestion flow</span><span class="sm" style="display:block">lessons 08–14 in one picture</span></span><span class="st">diagram</span></a>
+      <a class="lesson-card" href="../src/05-query-flow.html"><span class="n" style="background:#1d4ed8">C</span><span><span class="tt">Query flow</span><span class="sm" style="display:block">lessons 15–19 in one picture</span></span><span class="st">diagram</span></a>
+      <a class="lesson-card" href="../src/06-evaluation-loop.html"><span class="n" style="background:#b45309">D</span><span><span class="tt">Evaluation loop</span><span class="sm" style="display:block">lessons 20–21 in one picture</span></span><span class="st">diagram</span></a>
+    </div>
+  </section>
+</main>
+<script src="assets/path.js"></script>
+</body>
+</html>

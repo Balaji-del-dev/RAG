@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capstone: the complete system</title>
+<link rel="stylesheet" href="assets/concepts.css">
+<style>
+  .check li { list-style: none; margin-left: -20px; }
+  .check input { margin-right: 8px; transform: translateY(1px); }
+</style>
+</head>
+<body data-lesson="27">
+<main><article class="content">
+
+<h2><span class="ix">1</span>What you will learn</h2>
+<ul>
+  <li>How all 26 lessons fit together in one request and one ingestion run.</li>
+  <li>Which platform component, table and setting each concept maps to.</li>
+  <li>A build order and a production-readiness checklist.</li>
+  <li>Hands-on projects to turn the knowledge into skill.</li>
+</ul>
+
+<h2><span class="ix">2</span>The whole system in two journeys</h2>
+<h3>Journey A — a PDF becomes searchable</h3>
+<div class="flow">
+  <span class="bx">upload<small>09 · 23</small></span><span class="ar">→</span><span class="bx">validate + hash<small>10 · 22</small></span><span class="ar">→</span>
+  <span class="bx">MinIO + job + outbox<small>25</small></span><span class="ar">→</span><span class="bx">parse / OCR<small>09</small></span><span class="ar">→</span>
+  <span class="bx">clean + metadata<small>10</small></span><span class="ar">→</span><span class="bx">chunk<small>02 · 11</small></span><span class="ar">→</span>
+  <span class="bx">embed<small>03 · 12</small></span><span class="ar">→</span><span class="bx">Qdrant + OpenSearch<small>13 · 14</small></span><span class="ar">→</span>
+  <span class="bx hl">validate + publish<small>20 · 25</small></span>
+</div>
+<h3>Journey B — a question becomes a cited answer</h3>
+<div class="flow">
+  <span class="bx">validate<small>22 · 23</small></span><span class="ar">→</span><span class="bx">understand query<small>15</small></span><span class="ar">→</span>
+  <span class="bx">dense ∥ BM25<small>12–14</small></span><span class="ar">→</span><span class="bx">RRF<small>16</small></span><span class="ar">→</span>
+  <span class="bx">rerank<small>17</small></span><span class="ar">→</span><span class="bx">assemble<small>02 · 18</small></span><span class="ar">→</span>
+  <span class="bx">generate<small>01 · 04–07</small></span><span class="ar">→</span><span class="bx hl">validate · cite · or abstain<small>18 · 22</small></span><span class="ar">→</span>
+  <span class="bx">trace + evaluate<small>20 · 21</small></span>
+</div>
+
+<h2><span class="ix">3</span>Concept → platform map</h2>
+<table class="t">
+  <tr><th>Lessons</th><th>Component</th><th>Tables / config</th></tr>
+  <tr><td>01, 04–07</td><td>LiteLLM → Ollama / vLLM</td><td><code>model_definitions</code>, <code>generation_definitions</code></td></tr>
+  <tr><td>02</td><td>context budget, token counting</td><td><code>chunks.token_count</code>, <code>answer_records.token_usage_json</code></td></tr>
+  <tr><td>03, 12</td><td>local embedding model</td><td><code>embedding_records</code>, <code>pipeline_versions</code></td></tr>
+  <tr><td>08</td><td>the whole ingestion + query design</td><td><a href="../images/01-system-architecture.png">system architecture</a></td></tr>
+  <tr><td>09–11</td><td>Celery stages 1–3</td><td><code>extracted_artifacts</code>, <code>document_elements</code>, <code>chunks</code>, <code>chunk_relationships</code></td></tr>
+  <tr><td>13</td><td>Qdrant</td><td><code>index_generations.qdrant_collection</code>, payload indexes</td></tr>
+  <tr><td>14</td><td>OpenSearch</td><td><code>index_generations.opensearch_index</code>, mappings</td></tr>
+  <tr><td>15–17</td><td>Query Orchestrator retrieval</td><td><code>retrieval_definitions</code>, <code>retrieval_results</code></td></tr>
+  <tr><td>18</td><td>grounded prompt, validation</td><td><code>answer_records.citation_data</code>, <code>status</code></td></tr>
+  <tr><td>19</td><td>future: agentic routing</td><td>enabled only after evaluation</td></tr>
+  <tr><td>20</td><td>DeepEval on Celery, dashboard</td><td><code>evaluation_*</code> tables</td></tr>
+  <tr><td>21</td><td>Langfuse, Flower</td><td><code>retrieval_runs.trace_id</code>, <code>processing_step_runs</code></td></tr>
+  <tr><td>22–24</td><td>validation, filters, lifecycle</td><td><code>audit_events</code>, document lifecycle, upload rules</td></tr>
+  <tr><td>25</td><td>outbox, generations, reconciliation</td><td><code>outbox_events</code>, <code>index_validations</code></td></tr>
+  <tr><td>26</td><td>adapted models</td><td>new <code>model_definitions</code> revision → new pipeline version</td></tr>
+</table>
+
+<h2><span class="ix">4</span>Build order</h2>
+<ol class="steps">
+  <li><b>Configuration and registry</b> models (pipeline, component and model definitions). Re-read 06, 07.</li>
+  <li><b>Upload, validation, hashing, versioning</b> into MinIO + PostgreSQL. Re-read 09, 10, 23.</li>
+  <li><b>Jobs</b>: outbox, Celery, retries, step runs. Re-read 25.</li>
+  <li><b>Parsing, OCR, normalization, chunking, embeddings.</b> Re-read 09–12.</li>
+  <li><b>Qdrant and OpenSearch indexing</b>, generations, validation, publication. Re-read 13, 14, 25.</li>
+  <li><b>Hybrid retrieval, RRF, reranking.</b> Re-read 15–17.</li>
+  <li><b>Grounded generation</b>, citations, abstention, validation. Re-read 05, 07, 18.</li>
+  <li><b>Evaluation and tracing</b>, then guardrails and security hardening. Re-read 20–24.</li>
+</ol>
+
+<h2><span class="ix">5</span>Production-readiness checklist</h2>
+<ul class="check" id="checklist">
+  <li><label><input type="checkbox"> Every file type in scope parses correctly on a sample set; OCR fallback tested on scans.</label></li>
+  <li><label><input type="checkbox"> Chunk sizes measured in embedder tokens; no truncation; tables kept intact.</label></li>
+  <li><label><input type="checkbox"> Embedding model, revision, prefixes and dimension pinned and recorded.</label></li>
+  <li><label><input type="checkbox"> Hybrid retrieval with identical filters on both engines; RRF; reranker with timeout.</label></li>
+  <li><label><input type="checkbox"> Abstention path works; reranker threshold calibrated on the evaluation set.</label></li>
+  <li><label><input type="checkbox"> Answer schema, citation and grounding checks before anything is returned.</label></li>
+  <li><label><input type="checkbox"> Golden dataset (with unanswerable cases) and a baseline run stored.</label></li>
+  <li><label><input type="checkbox"> Release gate: acceptance criteria + manual approval, audited.</label></li>
+  <li><label><input type="checkbox"> Request and trace IDs end to end; per-stage latency; alerts on SLOs and queue lag.</label></li>
+  <li><label><input type="checkbox"> Access control enforced in retrieval and tested for cross-user leakage.</label></li>
+  <li><label><input type="checkbox"> Injection defences: delimited context, safe output rendering, no secrets in prompts.</label></li>
+  <li><label><input type="checkbox"> All services private and authenticated; model files verified; no runtime downloads.</label></li>
+  <li><label><input type="checkbox"> Complete deletion across MinIO, PostgreSQL, both indexes, caches and traces.</label></li>
+  <li><label><input type="checkbox"> Outbox, idempotent tasks, reconciliation job, blue-green generations with rollback.</label></li>
+  <li><label><input type="checkbox"> Backups restored successfully at least once; index rebuild time measured.</label></li>
+</ul>
+
+<h2><span class="ix">6</span>Hands-on projects</h2>
+<div class="cards">
+  <div class="card"><h4>1 · Baseline in a weekend</h4><p>20–50 real PDFs → PyMuPDF → recursive chunks → one embedding model → Qdrant → a local LLM. Write 30 questions with expected pages. Measure recall@5.</p></div>
+  <div class="card"><h4>2 · Make retrieval hybrid</h4><p>Add OpenSearch BM25 and RRF. Re-measure. Note which question types improved (IDs? names?).</p></div>
+  <div class="card"><h4>3 · Add a reranker</h4><p>Rerank the top 50. Compare MRR and nDCG@5, and the added latency.</p></div>
+  <div class="card"><h4>4 · Grounding and abstention</h4><p>Add a citation schema and validation, plus 10 unanswerable questions. Measure faithfulness and abstention accuracy.</p></div>
+  <div class="card"><h4>5 · Break it on purpose</h4><p>Upload a document with hidden injected instructions and test your defences. Try cross-user retrieval with access groups.</p></div>
+  <div class="card"><h4>6 · Ship it</h4><p>Add tracing, a latency budget, outbox-based jobs and blue-green index publication.</p></div>
+</div>
+
+<h2><span class="ix">7</span>Where to go next</h2>
+<ul>
+  <li>Re-read the architecture: <a href="../src/01-system-architecture.html">system</a> · <a href="../src/02-database-architecture.html">data &amp; storage</a> · <a href="../src/03-database-schema.html">schema</a> · <a href="../src/04-ingestion-flow.html">ingestion</a> · <a href="../src/05-query-flow.html">query</a> · <a href="../src/06-evaluation-loop.html">evaluation</a>.</li>
+  <li>Keep a personal evaluation set from day one — it will teach you more than any article.</li>
+  <li>Revisit lessons 19 and 26 once the baseline is stable and evaluation shows what is still failing.</li>
+</ul>
+
+<h2><span class="ix">8</span>Check yourself</h2>
+<details class="q"><summary>A user says "the answer is wrong". Walk through your first four checks.</summary><div>(1) Find the trace by request ID. (2) Was the right chunk retrieved, and at what rank, by dense or BM25? (3) Did it reach the prompt after rerank and assembly? (4) Did the model use it, and did validation pass? Then add the case to the evaluation set.</div></details>
+<details class="q"><summary>You want to switch to a better embedding model. List the steps.</summary><div>New model_definitions revision → new pipeline version → re-embed all chunks into a new index generation → validate (counts + evaluation set) → compare with baseline → approve → publish → keep the old generation for rollback.</div></details>
+
+<h2><span class="ix">9</span>Key terms</h2>
+<div class="terms"><span><b>end-to-end trace</b></span><span><b>baseline</b></span><span><b>release gate</b></span><span><b>index generation</b></span><span><b>readiness checklist</b></span></div>
+
+<script>
+(function () {
+  // checklist ticks are remembered in this browser only
+  const KEY = "rag-learning-path:capstone-checklist";
+  const boxes = [...document.querySelectorAll("#checklist input")];
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { saved = []; }
+  boxes.forEach((b, i) => {
+    b.checked = !!saved[i];
+    b.addEventListener("change", () => { try { localStorage.setItem(KEY, JSON.stringify(boxes.map((x) => x.checked))); } catch { /* ignore */ } });
+  });
+})();
+</script>
+</article></main>
+<script src="assets/path.js"></script>
+</body>
+</html>

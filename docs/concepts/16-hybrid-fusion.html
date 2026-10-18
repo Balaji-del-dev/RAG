@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hybrid search & rank fusion</title>
+<link rel="stylesheet" href="assets/concepts.css">
+</head>
+<body data-lesson="16">
+<main><article class="content">
+
+<h2><span class="ix">1</span>What you will learn</h2>
+<ul>
+  <li>Why combining dense and BM25 retrieval beats either one alone.</li>
+  <li>Why raw scores can't simply be added together.</li>
+  <li>Reciprocal Rank Fusion (RRF), worked step by step.</li>
+  <li>Weighted score fusion, candidate counts, and native vs application-level fusion.</li>
+</ul>
+
+<h2><span class="ix">2</span>Why it matters</h2>
+<p>Dense search finds meaning; BM25 finds exact terms (lessons 13–14). Questions mix both: "What is the penalty in clause 7.3 for late delivery?" Hybrid search raises <b>recall</b> — the chance that the right chunk is among the candidates — and recall is the foundation everything later depends on.</p>
+
+<h2><span class="ix">3</span>Core ideas</h2>
+<h3>The score-scale problem</h3>
+<p>Cosine similarity lives roughly between 0 and 1, while BM25 scores are unbounded (3.2, 17.8, 41.0…) and depend on the query. Adding them directly lets BM25 dominate on some queries and vanish on others. You need either <b>ranks</b> (RRF) or <b>normalized scores</b>.</p>
+
+<h3>Reciprocal Rank Fusion</h3>
+<pre><code>RRF(d) = Σ over result lists i:   wᵢ / (k + rankᵢ(d))        k ≈ 60, wᵢ = 1 by default</code></pre>
+<ul>
+  <li>Only <b>positions</b> matter, so no calibration is needed between engines.</li>
+  <li>Documents found by <b>both</b> retrievers get two contributions and rise to the top.</li>
+  <li><b>k</b> controls how fast credit falls with rank. Larger k flattens the differences between top ranks.</li>
+</ul>
+<table class="t">
+  <tr><th>Chunk</th><th>Dense rank</th><th>BM25 rank</th><th>RRF (k = 60)</th></tr>
+  <tr><td>c12</td><td>1</td><td>3</td><td>1/61 + 1/63 = <b>0.0323</b></td></tr>
+  <tr><td>c48</td><td>2</td><td>—</td><td>1/62 = 0.0161</td></tr>
+  <tr><td>c91</td><td>—</td><td>1</td><td>1/61 = 0.0164</td></tr>
+  <tr><td>c77</td><td>3</td><td>2</td><td>1/63 + 1/62 = <b>0.0320</b></td></tr>
+</table>
+<p>c12 and c77, found by both retrievers, end up first and second.</p>
+
+<div class="demo">
+  <h4>Try it: RRF calculator</h4>
+  <div class="hint">Enter each ranked list as comma-separated IDs, best first.</div>
+  <label>dense <input type="text" id="la" value="c12, c48, c77, c05, c33" size="28"></label>
+  <label>BM25 <input type="text" id="lb" value="c91, c77, c12, c64, c05" size="28"></label><br>
+  <label>k <input type="range" id="k" min="1" max="120" value="60"><b id="kv"></b></label>
+  <label>BM25 weight <input type="range" id="w" min="0" max="2" step="0.1" value="1"><b id="wv"></b></label>
+  <div class="out" id="rrf"></div>
+</div>
+
+<h3>Weighted score fusion</h3>
+<pre><code>score(d) = α · norm(dense(d)) + (1 − α) · norm(bm25(d))      norm = min-max or z-score per query</code></pre>
+<p>This can beat RRF when tuned well, but it is sensitive to outliers and needs tuning of α on an evaluation set. RRF is the robust default.</p>
+
+<h2><span class="ix">4</span>How it works in a pipeline</h2>
+<ol class="steps">
+  <li>Run dense and BM25 searches <b>in parallel</b>, with the same filters, on the same index generation.</li>
+  <li>Take enough candidates: typically <b>top 20–100 from each</b>.</li>
+  <li>Normalize the candidates to one shape keyed by chunk ID, and dedupe.</li>
+  <li>Fuse (RRF), keep the top 30–50, and pass them to the reranker (lesson 17).</li>
+</ol>
+<div class="callout info"><b>Native vs application-level fusion</b>Qdrant can fuse dense and sparse vectors inside one query (prefetch + RRF), and OpenSearch has hybrid queries with normalization or RRF. When dense lives in Qdrant and BM25 in OpenSearch, fusion must happen in your application, as in this platform.</div>
+
+<h2><span class="ix">5</span>In the real world</h2>
+<ul>
+  <li>Hybrid + reranker is the most common production retrieval setup today.</li>
+  <li>Give a retriever more weight only when evaluation proves it — for example more BM25 weight for ID-heavy corpora.</li>
+  <li>Keep each retriever's original ranks and scores. They are essential for debugging ("found by BM25 only").</li>
+  <li>Dedupe at the <b>parent or section level</b> too, so five chunks of the same section don't fill the context.</li>
+</ul>
+
+<h2><span class="ix">6</span>Common mistakes</h2>
+<ul>
+  <li>Adding raw cosine and BM25 scores together.</li>
+  <li>Taking only the top 5 from each retriever, so fusion has nothing to work with.</li>
+  <li>Different filters on the two engines, so forbidden documents leak in through one side.</li>
+  <li>Searching two different index generations.</li>
+</ul>
+
+<h2><span class="ix">7</span>In our platform</h2>
+<div class="platform"><h4>Where this lives</h4><ul>
+  <li>Online "Hybrid retrieval — both run in parallel" → "RRF fusion &amp; deduplication" (k = 60) in the Query Orchestrator.</li>
+  <li><code>retrieval_definitions.dense_config</code>, <code>bm25_config</code> and <code>fusion_config</code> (strategy, rank constant, weights).</li>
+  <li><code>retrieval_results</code>: <code>retrieval_source</code>, <code>original_rank</code>, <code>original_score</code>, <code>fusion_rank</code> for every candidate.</li>
+</ul></div>
+
+<h2><span class="ix">8</span>Check yourself</h2>
+<details class="q"><summary>Why does RRF not need score normalization?</summary><div>It uses only rank positions, which are comparable across engines, never the raw scores.</div></details>
+<details class="q"><summary>A chunk is rank 1 in BM25 but absent from dense results. Can it still win?</summary><div>Yes, if no chunk appears high in both lists. Chunks found by both usually win because they get two contributions.</div></details>
+<details class="q"><summary>Why must both engines use the same filters?</summary><div>Otherwise one side can return documents the user must not see, or that are outside the requested scope, and fusion lets them through.</div></details>
+
+<h2><span class="ix">9</span>Key terms · Go deeper</h2>
+<div class="terms"><span><b>hybrid search</b></span><span><b>recall</b></span><span><b>RRF</b></span><span><b>rank constant k</b></span><span><b>score normalization</b></span><span><b>weighted fusion</b></span><span><b>candidate pool</b></span></div>
+<ul class="refs">
+  <li>Cormack, Clarke &amp; Büttcher — <a href="https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf">Reciprocal Rank Fusion outperforms Condorcet and individual rank learning methods</a></li>
+  <li>OpenSearch — <a href="https://docs.opensearch.org/latest/vector-search/ai-search/hybrid-search/rrf/">Reciprocal rank fusion</a> · Qdrant — <a href="https://qdrant.tech/documentation/concepts/hybrid-queries">Hybrid queries</a></li>
+</ul>
+
+<script>
+(function () {
+  const ids = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
+  function run() {
+    const A = ids(document.getElementById("la").value), B = ids(document.getElementById("lb").value);
+    const k = +document.getElementById("k").value, w = +document.getElementById("w").value;
+    document.getElementById("kv").textContent = k; document.getElementById("wv").textContent = w.toFixed(1);
+    const s = new Map();
+    const add = (list, weight, key) => list.forEach((d, i) => {
+      const e = s.get(d) || { sc: 0, a: "—", b: "—" };
+      e.sc += weight / (k + i + 1);   // rank is i + 1
+      e[key] = i + 1;
+      s.set(d, e);
+    });
+    add(A, 1, "a");
+    add(B, w, "b");
+    const rows = [...s.entries()].sort((x, y) => y[1].sc - x[1].sc);
+    const max = rows.length ? rows[0][1].sc : 1;
+    document.getElementById("rrf").innerHTML = rows.map(([d, e], i) =>
+      `<div class="barrow"><span><b>${i + 1}.</b> ${d} <small style="color:var(--muted)">(${e.a} / ${e.b})</small></span><span class="b" style="width:${(e.sc / max * 100).toFixed(1)}%"></span><span>${e.sc.toFixed(4)}</span></div>`).join("") +
+      `<div class="hint" style="margin-top:6px">(dense rank / BM25 rank)</div>`;
+  }
+  ["la", "lb", "k", "w"].forEach((id) => document.getElementById(id).addEventListener("input", run));
+  run();
+})();
+</script>
+</article></main>
+<script src="assets/path.js"></script>
+</body>
+</html>

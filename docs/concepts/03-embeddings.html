@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embeddings & vector similarity</title>
+<link rel="stylesheet" href="assets/concepts.css">
+</head>
+<body data-lesson="03">
+<main><article class="content">
+
+<h2><span class="ix">1</span>What you will learn</h2>
+<ul>
+  <li>What an embedding is: meaning represented as a list of numbers (a vector).</li>
+  <li>How similarity is measured: cosine similarity, dot product and distance.</li>
+  <li>What embeddings capture well, and what they miss.</li>
+  <li>How dimensions affect memory, and why vectors from different models never mix.</li>
+</ul>
+
+<h2><span class="ix">2</span>Why it matters</h2>
+<p>Semantic search, clustering, deduplication and recommendations all rely on one idea: <b>texts with similar meaning get vectors that point in similar directions</b>. In RAG, the question and every chunk become vectors, and "relevant" means "nearby". Embeddings also live inside every LLM, as the first step of reading tokens (lesson 04).</p>
+
+<h2><span class="ix">3</span>Core ideas</h2>
+<h3>An embedding is a point in a high-dimensional space</h3>
+<p>An embedding model turns text into a fixed-length vector, typically <b>384 to 4,096 numbers</b>. No single number has a human meaning. Together they place the text in a space where related meanings are close.</p>
+<figure>
+<svg viewBox="0 0 640 300" role="img" aria-label="2D sketch of embedding space">
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0L10,5L0,10z" fill="currentColor"/></marker></defs>
+  <g fill="none" stroke="#94a3b8" stroke-width="1"><line x1="60" y1="260" x2="600" y2="260"/><line x1="60" y1="260" x2="60" y2="20"/></g>
+  <g font-family="Noto Sans, sans-serif" font-size="14">
+    <g fill="#7c3aed"><circle cx="420" cy="80" r="6"/><circle cx="455" cy="105" r="6"/><circle cx="400" cy="115" r="6"/>
+      <text x="430" y="70">kitten</text><text x="465" y="110">cat</text><text x="320" y="128">small pet</text></g>
+    <g fill="#15803d"><circle cx="170" cy="200" r="6"/><circle cx="205" cy="220" r="6"/>
+      <text x="100" y="192">car</text><text x="215" y="236">vehicle</text></g>
+    <g fill="#b45309"><circle cx="520" cy="215" r="6"/><text x="470" y="240">invoice total</text></g>
+  </g>
+  <g stroke="#7c3aed" stroke-width="2" color="#7c3aed"><line x1="60" y1="260" x2="452" y2="107" marker-end="url(#a)"/></g>
+  <g stroke="#15803d" stroke-width="2" color="#15803d"><line x1="60" y1="260" x2="202" y2="219" marker-end="url(#a)"/></g>
+  <text x="250" y="160" font-family="Noto Sans, sans-serif" font-size="13" fill="#64748b">small angle = similar meaning</text>
+</svg>
+<figcaption>A 2-D cartoon. Real embeddings have hundreds of dimensions, but the idea is the same: direction carries meaning.</figcaption>
+</figure>
+
+<h3>From word vectors to contextual embeddings</h3>
+<ul>
+  <li><b>Static word vectors</b> (word2vec, GloVe, around 2013–2014): one vector per word, so "bank" (river) and "bank" (money) share a vector.</li>
+  <li><b>Contextual embeddings</b> (transformers): each token's vector depends on the words around it. A <b>sentence embedding</b> pools these token vectors, usually by averaging them or using a special token, into one vector for the whole text.</li>
+</ul>
+
+<h3>Measuring similarity</h3>
+<table class="t">
+  <tr><th>Measure</th><th>Formula</th><th>Notes</th></tr>
+  <tr><td><b>Cosine similarity</b></td><td>a·b / (|a| |b|)</td><td>Angle only, from −1 to 1. The most common choice for text.</td></tr>
+  <tr><td><b>Dot product</b></td><td>Σ aᵢ bᵢ</td><td>Equal to cosine when vectors are normalized to length 1. Fastest to compute.</td></tr>
+  <tr><td><b>Euclidean (L2) distance</b></td><td>√Σ (aᵢ − bᵢ)²</td><td>Smaller is closer. For unit vectors it ranks the same as cosine.</td></tr>
+</table>
+<div class="callout tip"><b>Practical rule</b>Normalize embeddings to length 1 at write time. Cosine, dot product and L2 then give the same ranking, and dot product is the cheapest.</div>
+
+<div class="demo" id="cos-demo">
+  <h4>Try it: cosine similarity</h4>
+  <div class="hint">Enter two vectors (comma-separated numbers of equal length).</div>
+  <label>A <input type="text" id="va" value="0.9, 0.8, 0.1" size="22"></label>
+  <label>B <input type="text" id="vb" value="0.85, 0.75, 0.2" size="22"></label>
+  <div class="out" id="cos-out"></div>
+</div>
+
+<h2><span class="ix">4</span>How it works in retrieval</h2>
+<ol class="steps">
+  <li>At ingestion, embed every chunk once and store the vector with the chunk ID (lessons 12–13).</li>
+  <li>At query time, embed the question <b>with the same model</b>.</li>
+  <li>Find the stored vectors with the highest similarity: the nearest neighbours.</li>
+  <li>Return their chunks as candidates for reranking and the prompt.</li>
+</ol>
+
+<h3>What embeddings capture — and miss</h3>
+<div class="cards">
+  <div class="card"><h4>Good at</h4><ul><li>paraphrases ("reset password" ≈ "forgot my login")</li><li>topic and intent</li><li>cross-lingual matching (multilingual models)</li></ul></div>
+  <div class="card"><h4>Weak at</h4><ul><li>exact IDs, codes, part numbers (<code>E-4012</code>)</li><li>rare names and new jargon</li><li>negation and numbers ("not allowed", "&gt; 50 kg")</li></ul></div>
+</div>
+<p>That is why production systems pair dense vectors with <b>keyword search (BM25)</b>. Lessons 14 and 16 cover this.</p>
+
+<h2><span class="ix">5</span>In the real world</h2>
+<ul>
+  <li><b>Memory:</b> vectors × dimensions × 4 bytes (float32). One million chunks × 1,024 dims ≈ <b>4 GB</b>, before index overhead. Quantization shrinks this (lesson 13).</li>
+  <li><b>Scores are not probabilities.</b> A cosine of 0.78 can be "very relevant" for one model and "unrelated" for another. Tune thresholds per model, using your evaluation set.</li>
+  <li><b>Models are not interchangeable.</b> Vectors from two different models — or two revisions of the same model — live in different spaces. Changing the model means re-embedding everything.</li>
+  <li>The same embeddings also power <b>deduplication</b> (near-identical chunks), <b>clustering</b> (topic maps) and <b>semantic caching</b> (lesson 25).</li>
+</ul>
+
+<h2><span class="ix">6</span>Common mistakes</h2>
+<ul>
+  <li>Embedding queries with a different model, revision or prefix than the documents.</li>
+  <li>Using a hard-coded similarity threshold copied from another model.</li>
+  <li>Relying on dense search alone for IDs, error codes and names.</li>
+  <li>Forgetting normalization, then using dot product as if it were cosine.</li>
+</ul>
+
+<h2><span class="ix">7</span>In our platform</h2>
+<div class="platform"><h4>Where this lives</h4><ul>
+  <li><code>embedding_records</code> stores <code>model_id</code>, <code>model_version</code>, <code>vector_dimension</code> and the Qdrant <code>vector_point_id</code> for every chunk.</li>
+  <li>Each Qdrant collection holds vectors from <b>one model revision and one dimension</b>. A new model means a new pipeline version and a new index generation.</li>
+  <li>The online flow embeds the question with the <b>published generation's</b> model ("Embed query locally").</li>
+</ul></div>
+
+<h2><span class="ix">8</span>Check yourself</h2>
+<details class="q"><summary>Why must the query be embedded with the same model as the documents?</summary><div>Each model defines its own vector space. Vectors from different models (or revisions) are not comparable, so similarity scores between them are meaningless.</div></details>
+<details class="q"><summary>How much raw memory do 2 million vectors of 768 dimensions need in float32?</summary><div>2,000,000 × 768 × 4 bytes ≈ 6.1 GB, plus index overhead.</div></details>
+<details class="q"><summary>A user searches for "error E-4012" and dense search returns generic error pages. Why?</summary><div>Exact codes carry little semantic meaning for embedding models. BM25 keyword search matches the exact token and should be combined with dense search.</div></details>
+
+<h2><span class="ix">9</span>Key terms · Go deeper</h2>
+<div class="terms"><span><b>embedding</b></span><span><b>vector</b></span><span><b>dimension</b></span><span><b>cosine similarity</b></span><span><b>dot product</b></span><span><b>normalization</b></span><span><b>nearest neighbour</b></span><span><b>contextual embedding</b></span><span><b>pooling</b></span></div>
+<ul class="refs">
+  <li>Reimers &amp; Gurevych — <a href="https://arxiv.org/abs/1908.10084">Sentence-BERT</a> (how sentence embeddings are trained)</li>
+  <li>Mikolov et al. — <a href="https://arxiv.org/abs/1301.3781">Efficient Estimation of Word Representations</a> (word2vec)</li>
+  <li><a href="https://sbert.net/">Sentence Transformers documentation</a></li>
+</ul>
+
+<script>
+(function () {
+  const parse = (s) => s.split(",").map((x) => parseFloat(x.trim())).filter((x) => !Number.isNaN(x));
+  function run() {
+    const a = parse(document.getElementById("va").value), b = parse(document.getElementById("vb").value);
+    const out = document.getElementById("cos-out");
+    if (!a.length || a.length !== b.length) { out.textContent = "Vectors must have the same number of values."; return; }
+    const dot = a.reduce((s, x, i) => s + x * b[i], 0);
+    const na = Math.hypot(...a), nb = Math.hypot(...b);
+    const cos = dot / (na * nb), l2 = Math.hypot(...a.map((x, i) => x - b[i]));
+    out.innerHTML = `cosine = <b>${cos.toFixed(4)}</b> · dot = ${dot.toFixed(4)} · L2 distance = ${l2.toFixed(4)} · |A| = ${na.toFixed(3)}, |B| = ${nb.toFixed(3)}`;
+  }
+  document.getElementById("va").addEventListener("input", run);
+  document.getElementById("vb").addEventListener("input", run);
+  run();
+})();
+</script>
+</article></main>
+<script src="assets/path.js"></script>
+</body>
+</html>

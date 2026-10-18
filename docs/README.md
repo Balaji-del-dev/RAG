@@ -31,6 +31,20 @@ A configurable, fully local RAG platform. Files are uploaded through React and v
 
 ---
 
+## Learning path — concepts behind this platform
+
+**[concepts/index.html](concepts/index.html)** — 27 lessons in one order (about 11 hours). Each lesson is its own HTML page with Previous / Next navigation and a "mark as learned" tracker.
+
+| Stage | Lessons |
+|---|---|
+| 1 · Foundations | 01 how LLMs work · 02 tokens · 03 embeddings · 04 transformer architecture · 05 generation & decoding · 06 running models locally · 07 prompt engineering |
+| 2 · Ingestion pipeline | 08 RAG fundamentals · 09 parsing & OCR · 10 cleaning & metadata · 11 chunking · 12 embedding models · 13 vector indexing · 14 lexical search & BM25 |
+| 3 · Retrieval & answers | 15 query understanding · 16 hybrid search & RRF · 17 reranking · 18 grounded generation · 19 agents, tools & GraphRAG |
+| 4 · Quality | 20 evaluation · 21 observability & tracing |
+| 5 · Safety & production | 22 guardrails · 23 security (OWASP LLM Top 10) · 24 privacy & governance · 25 production engineering · 26 fine-tuning · 27 capstone |
+
+---
+
 ## Diagrams
 
 ### 1. System architecture

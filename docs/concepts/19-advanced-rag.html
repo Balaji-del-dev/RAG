@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced RAG: agents, tools & graphs</title>
+<link rel="stylesheet" href="assets/concepts.css">
+</head>
+<body data-lesson="19">
+<main><article class="content">
+
+<h2><span class="ix">1</span>What you will learn</h2>
+<ul>
+  <li>Tool (function) calling: how an LLM asks your code to do something.</li>
+  <li>Agentic RAG: the model decides when and what to retrieve, in a loop (ReAct).</li>
+  <li>Corrective RAG, Self-RAG, multi-hop retrieval, GraphRAG and text-to-SQL.</li>
+  <li>The Model Context Protocol (MCP), and when all of this is worth the cost.</li>
+</ul>
+
+<h2><span class="ix">2</span>Why it matters</h2>
+<p>A fixed pipeline (retrieve once, answer once) handles most factual questions. Some questions need more: several lookups ("compare A and B"), data from a database ("how many tickets last week?"), or global summaries ("main themes across 2,000 reports"). Advanced patterns handle these — at the price of latency, cost, unpredictability and new security risks.</p>
+
+<h2><span class="ix">3</span>Core ideas</h2>
+<h3>Tool calling</h3>
+<ol class="steps">
+  <li>You describe tools to the model: name, purpose and a JSON Schema for the arguments.</li>
+  <li>The model replies with a <b>tool call</b> instead of text, e.g. <code>search_documents({"query": "carry-over limit", "department": "HR"})</code>.</li>
+  <li><b>Your code</b> validates the arguments, checks permissions, runs the tool and returns the result as a <code>tool</code> message.</li>
+  <li>The model continues — another call, or the final answer.</li>
+</ol>
+<div class="callout warn"><b>The model never executes anything</b>Your application does. Every tool call is untrusted input: validate it, allow-list it, enforce the user's permissions, and require human approval for anything with side effects (lesson 23).</div>
+
+<h3>Agentic RAG (ReAct loop)</h3>
+<div class="flow">
+  <span class="bx">Thought<small>what do I need?</small></span><span class="ar">→</span>
+  <span class="bx hl">Action<small>call a tool</small></span><span class="ar">→</span>
+  <span class="bx">Observation<small>tool result</small></span><span class="ar">↺</span>
+  <span class="bx">… until done → answer</span>
+</div>
+<p>The model can retrieve several times, refine queries and combine results. Always set limits: maximum steps, time and tokens.</p>
+
+<h2><span class="ix">4</span>Patterns</h2>
+<table class="t">
+  <tr><th>Pattern</th><th>Idea</th><th>Use when</th></tr>
+  <tr><td><b>Corrective RAG (CRAG)</b></td><td>grade the retrieved documents; if poor, rewrite the query and retrieve again (or abstain)</td><td>retrieval is often partly relevant</td></tr>
+  <tr><td><b>Self-RAG</b></td><td>the model is trained to decide when to retrieve and to critique whether its output is supported</td><td>research setups; needs specially trained models</td></tr>
+  <tr><td><b>Multi-hop / iterative</b></td><td>answer a sub-question, use the result to form the next query</td><td>"Who approved the policy that replaced X?"</td></tr>
+  <tr><td><b>GraphRAG</b></td><td>extract entities and relations into a knowledge graph, build community summaries, retrieve over the graph</td><td>global, corpus-wide questions; relationship questions. Indexing is expensive.</td></tr>
+  <tr><td><b>Text-to-SQL</b></td><td>the model writes SQL against structured tables (read-only, validated)</td><td>counts, sums, filters over records — not a vector-search job</td></tr>
+  <tr><td><b>Routing</b></td><td>a classifier sends each question to the right pipeline</td><td>mixed workloads (documents, metrics, chit-chat)</td></tr>
+</table>
+
+<h3>Model Context Protocol (MCP)</h3>
+<p>MCP is an open standard for connecting LLM applications to tools and data sources. A <b>server</b> exposes tools, resources and prompts; a <b>client</b> (the AI application) discovers and calls them. It avoids custom glue code for every integration, and it brings the same security concerns as any tool call: permissions, input validation and trust in the server.</p>
+
+<h2><span class="ix">5</span>In the real world</h2>
+<ul>
+  <li><b>Start deterministic.</b> Most production RAG is a fixed pipeline plus a few routed special cases. Agents come after evaluation shows multi-step failures you can't fix otherwise.</li>
+  <li>Agents multiply latency and cost: 3–10 LLM calls per question is common.</li>
+  <li>They are harder to test. Evaluate the <b>trajectory</b> (which tools, in which order), not only the final answer.</li>
+  <li>Security risk grows with autonomy — see the OWASP Top 10 for Agentic Applications (lesson 23).</li>
+</ul>
+
+<h2><span class="ix">6</span>Common mistakes</h2>
+<ul>
+  <li>An agent where a single retrieval call would do.</li>
+  <li>No step, time or token limits, leading to loops and runaway cost.</li>
+  <li>Tools with broad permissions ("run any SQL", "send any email").</li>
+  <li>Text-to-SQL with a writable database connection.</li>
+</ul>
+
+<h2><span class="ix">7</span>In our platform</h2>
+<div class="platform"><h4>Where this lives</h4><ul>
+  <li>The platform starts with a <b>fixed, measurable pipeline</b>. Query rewriting, multi-query, HyDE, decomposition, corrective retrieval and agentic routing are enabled only when evaluation shows a gain.</li>
+  <li>Scope excludes web-search fallback, so "corrective" behaviour here means re-query or abstain.</li>
+  <li>Agentic features would plug into the <b>Query Orchestrator</b>, logging every step as a Langfuse span and storing tool calls with the run.</li>
+</ul></div>
+
+<h2><span class="ix">8</span>Check yourself</h2>
+<details class="q"><summary>Who executes a tool call: the model or your application?</summary><div>Your application. The model only proposes a call with arguments, and your code must validate and authorize it.</div></details>
+<details class="q"><summary>"How many invoices over ₹1 lakh were paid in March?" — vector search or text-to-SQL?</summary><div>Text-to-SQL (or a structured query) over invoice records. It is an aggregation over structured data, not a semantic lookup.</div></details>
+<details class="q"><summary>Why must agents have step and token limits?</summary><div>Loops and repeated tool calls can run indefinitely, multiplying cost and latency — a form of unbounded consumption.</div></details>
+
+<h2><span class="ix">9</span>Key terms · Go deeper</h2>
+<div class="terms"><span><b>tool calling</b></span><span><b>ReAct</b></span><span><b>agentic RAG</b></span><span><b>CRAG</b></span><span><b>Self-RAG</b></span><span><b>multi-hop</b></span><span><b>GraphRAG</b></span><span><b>text-to-SQL</b></span><span><b>MCP</b></span></div>
+<ul class="refs">
+  <li>Yao et al. — <a href="https://arxiv.org/abs/2210.03629">ReAct: Synergizing Reasoning and Acting</a></li>
+  <li>Yan et al. — <a href="https://arxiv.org/abs/2401.15884">Corrective RAG</a> · Asai et al. — <a href="https://arxiv.org/abs/2310.11511">Self-RAG</a></li>
+  <li>Edge et al. — <a href="https://arxiv.org/abs/2404.16130">From Local to Global: A GraphRAG Approach</a> · <a href="https://github.com/microsoft/graphrag">microsoft/graphrag</a></li>
+  <li><a href="https://modelcontextprotocol.io/">Model Context Protocol</a></li>
+</ul>
+
+</article></main>
+<script src="assets/path.js"></script>
+</body>
+</html>

@@ -11,6 +11,8 @@ Architecture documentation for a fully local, configurable RAG platform built fr
 
 The full write-up is in **[docs/README.md](docs/README.md)**.
 
+**Learning path:** [docs/concepts/index.html](docs/concepts/index.html) — 27 ordered lessons, from transformers and tokens to chunking, retrieval, evaluation, guardrails and security.
+
 | Diagram | |
 |---|---|
 | System architecture | [docs/images/01-system-architecture.png](docs/images/01-system-architecture.png) |
