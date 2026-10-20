@@ -52,7 +52,7 @@
         <li><span class="addrow">column <b style="color:#b45309">+</b></span> added column: <span class="mono">pipeline_versions.retrieval_definition_id</span>, <span class="mono">.generation_definition_id</span> (the brief leaves both definitions unreferenced); <span class="mono">chunks.pipeline_version_id</span> (chunks of one version re-processed by another pipeline must not collide); <span class="mono">processing_jobs.created_at</span> and <span class="mono">retrieval_runs.created_at</span> (the recommended indexes need them)</li>
         <li><span class="newtag">ADDED</span> <span class="mono">outbox_events</span> — durable Celery dispatch and index sync events, written in the same transaction as the job or chunk rows</li>
         <li><span class="newtag">OPTIONAL</span> <span class="mono">storage_objects</span> — shared MinIO object registry, as the brief describes</li>
-        <li><span class="newtag">ADDED</span> <b>4.7 Identity &amp; access</b> — authentication (<span class="mono">users</span>, <span class="mono">user_sessions</span>) and authorization: roles → permissions (RBAC) and document access groups. In Django: custom <span class="mono">AUTH_USER_MODEL</span>; roles = <span class="mono">Group</span>, permissions = <span class="mono">Permission</span>. Who-did-it columns <span class="addrow">+</span> on <span class="mono">documents</span>, <span class="mono">retrieval_runs</span>, <span class="mono">user_feedback</span>, <span class="mono">pipeline_versions</span>, <span class="mono">evaluation_runs</span>, <span class="mono">audit_events</span></li>
+        <li><span class="newtag">ADDED</span> <b>4.7 Identity &amp; access</b> — authentication (<span class="mono">users</span>, <span class="mono">user_sessions</span>) and authorization: roles → permissions (RBAC) and document access groups. In Django: custom <span class="mono">AUTH_USER_MODEL</span>; a custom auth backend answers <span class="mono">has_perm</span> from these role tables. Who-did-it columns <span class="addrow">+</span> on <span class="mono">documents</span>, <span class="mono">retrieval_runs</span>, <span class="mono">user_feedback</span>, <span class="mono">pipeline_versions</span>, <span class="mono">evaluation_runs</span>, <span class="mono">audit_events</span></li>
       </ul>
     </div>
     <div class="box">
@@ -75,7 +75,7 @@
         <li>self references: <span class="mono">document_versions.parent_version_id</span>, <span class="mono">chunks.parent_chunk_id</span></li>
         <li><span class="mono">documents.current_version_id → document_versions</span> (nullable, deferrable)</li>
         <li>polymorphic references: <span class="mono">outbox_events.aggregate_id</span>, <span class="mono">audit_events.entity_id</span></li>
-        <li>who-did-it references to <span class="mono">users</span>: <span class="mono">pipeline_versions.published_by</span>, <span class="mono">evaluation_runs.approved_by</span>, <span class="mono">audit_events.actor_user_id</span>, <span class="mono">*.granted_by</span></li>
+        <li>who-did-it references to <span class="mono">users</span>: <span class="mono">pipeline_versions.created_by</span> / <span class="mono">.published_by</span>, <span class="mono">evaluation_runs.approved_by</span>, <span class="mono">audit_events.actor_user_id</span>, <span class="mono">*.granted_by</span></li>
         <li>MinIO references are <span class="mono">(storage_bucket, storage_object_key)</span> pairs, matched to <span class="mono">storage_objects</span> when that registry is used</li>
       </ul>
     </div>
@@ -126,7 +126,7 @@
 <!-- pipeline_versions -->
 <g id="node2" class="node">
 <title>pipeline_versions</title>
-<polygon fill="white" stroke="none" points="790,-2077 790,-2291 1059,-2291 1059,-2077 790,-2077"/>
+<polygon fill="white" stroke="none" points="790,-2055 790,-2291 1059,-2291 1059,-2055 790,-2055"/>
 <polygon fill="#7c3aed" stroke="none" points="791,-2261 791,-2290 1058,-2290 1058,-2261 791,-2261"/>
 <text text-anchor="start" x="798" y="-2272.3" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="13.00" fill="white">pipeline_versions</text>
 <polygon fill="#ffffff" stroke="none" points="791,-2242 791,-2261 831,-2261 831,-2242 791,-2242"/>
@@ -173,20 +173,27 @@
 <text text-anchor="start" x="953.52" y="-2129.1" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="10.00" fill="#b45309">+</text>
 <polygon fill="#fffbeb" stroke="none" points="962,-2122 962,-2141 1058,-2141 1058,-2122 962,-2122"/>
 <text text-anchor="start" x="1031" y="-2128.5" font-family="Courier,monospace" font-size="10.00" fill="#64748b">uuid</text>
-<polygon fill="#f8fafc" stroke="none" points="791,-2100 791,-2122 831,-2122 831,-2100 791,-2100"/>
+<polygon fill="#fffbeb" stroke="none" points="791,-2100 791,-2122 831,-2122 831,-2100 791,-2100"/>
 <text text-anchor="start" x="794" y="-2106.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<polygon fill="#f8fafc" stroke="none" points="831,-2100 831,-2122 962,-2122 962,-2100 831,-2100"/>
-<text text-anchor="start" x="834" y="-2107.7" font-family="Helvetica,sans-Serif" font-size="11.00" fill="#0f172a">published_at</text>
-<polygon fill="#f8fafc" stroke="none" points="962,-2100 962,-2122 1058,-2122 1058,-2100 962,-2100"/>
-<text text-anchor="start" x="982.99" y="-2108" font-family="Courier,monospace" font-size="10.00" fill="#64748b">timestamptz?</text>
-<polygon fill="#fffbeb" stroke="none" points="791,-2078 791,-2100 831,-2100 831,-2078 791,-2078"/>
+<polygon fill="#fffbeb" stroke="none" points="831,-2100 831,-2122 962,-2122 962,-2100 831,-2100"/>
+<text text-anchor="start" x="834" y="-2108.7" font-family="Helvetica,sans-Serif" font-size="11.00" fill="#0f172a">created_by </text>
+<text text-anchor="start" x="891.48" y="-2108.7" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="10.00" fill="#b45309">+</text>
+<polygon fill="#fffbeb" stroke="none" points="962,-2100 962,-2122 1058,-2122 1058,-2100 962,-2100"/>
+<text text-anchor="start" x="964.99" y="-2108" font-family="Courier,monospace" font-size="10.00" fill="#64748b">uuid → users?</text>
+<polygon fill="#ffffff" stroke="none" points="791,-2078 791,-2100 831,-2100 831,-2078 791,-2078"/>
 <text text-anchor="start" x="794" y="-2084.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
-<polygon fill="#fffbeb" stroke="none" points="831,-2078 831,-2100 962,-2100 962,-2078 831,-2078"/>
-<text text-anchor="start" x="834" y="-2086.7" font-family="Helvetica,sans-Serif" font-size="11.00" fill="#0f172a">published_by </text>
-<text text-anchor="start" x="901.89" y="-2086.7" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="10.00" fill="#b45309">+</text>
-<polygon fill="#fffbeb" stroke="none" points="962,-2078 962,-2100 1058,-2100 1058,-2078 962,-2078"/>
-<text text-anchor="start" x="964.99" y="-2086" font-family="Courier,monospace" font-size="10.00" fill="#64748b">uuid → users?</text>
-<polygon fill="none" stroke="#7c3aed" points="790,-2077 790,-2291 1059,-2291 1059,-2077 790,-2077"/>
+<polygon fill="#ffffff" stroke="none" points="831,-2078 831,-2100 962,-2100 962,-2078 831,-2078"/>
+<text text-anchor="start" x="834" y="-2085.7" font-family="Helvetica,sans-Serif" font-size="11.00" fill="#0f172a">published_at</text>
+<polygon fill="#ffffff" stroke="none" points="962,-2078 962,-2100 1058,-2100 1058,-2078 962,-2078"/>
+<text text-anchor="start" x="982.99" y="-2086" font-family="Courier,monospace" font-size="10.00" fill="#64748b">timestamptz?</text>
+<polygon fill="#fffbeb" stroke="none" points="791,-2056 791,-2078 831,-2078 831,-2056 791,-2056"/>
+<text text-anchor="start" x="794" y="-2062.4" font-family="Helvetica,sans-Serif" font-size="14.00"> </text>
+<polygon fill="#fffbeb" stroke="none" points="831,-2056 831,-2078 962,-2078 962,-2056 831,-2056"/>
+<text text-anchor="start" x="834" y="-2064.7" font-family="Helvetica,sans-Serif" font-size="11.00" fill="#0f172a">published_by </text>
+<text text-anchor="start" x="901.89" y="-2064.7" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="10.00" fill="#b45309">+</text>
+<polygon fill="#fffbeb" stroke="none" points="962,-2056 962,-2078 1058,-2078 1058,-2056 962,-2056"/>
+<text text-anchor="start" x="964.99" y="-2064" font-family="Courier,monospace" font-size="10.00" fill="#64748b">uuid → users?</text>
+<polygon fill="none" stroke="#7c3aed" points="790,-2055 790,-2291 1059,-2291 1059,-2055 790,-2055"/>
 </g>
 <!-- component_definitions -->
 <g id="node3" class="node">

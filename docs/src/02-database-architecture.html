@@ -184,7 +184,7 @@
           <div class="grp idg" id="g-iam">
             <div class="gh"><span class="gt" style="color:#a16207">4.7 Identity &amp; access<span class="tagx">ADDED</span></span><span class="app">app: accounts</span></div>
             <div class="tables"><span>users</span><span>user_sessions</span><span>roles</span><span>permissions</span><span>role_permissions</span><span>user_roles</span><span>access_groups</span><span>user_access_groups</span><span>document_access_grants</span></div>
-            <div class="gn"><b>Authentication:</b> Argon2 password hashes (or LDAP / AD), lockout and revocable server-side sessions. <b>Authorization:</b> roles → permissions (Django Groups) and document access groups. <span class="mono">documents.created_by</span>, <span class="mono">retrieval_runs.user_id</span> and <span class="mono">audit_events.actor_user_id</span> point here.</div>
+            <div class="gn"><b>Authentication:</b> Argon2 password hashes (or LDAP / AD), lockout and revocable server-side sessions. <b>Authorization:</b> roles → permissions (own tables, checked through Django <span class="mono">has_perm</span>) and document access groups. <span class="mono">documents.created_by</span>, <span class="mono">retrieval_runs.user_id</span> and <span class="mono">audit_events.actor_user_id</span> point here.</div>
           </div>
         </div>
         <div class="gcol">

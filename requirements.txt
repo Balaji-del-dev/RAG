@@ -17,7 +17,8 @@ gunicorn==26.2.0
 uvicorn[standard]==0.54.0          # ASGI server, needed for streamed answers
 
 # ---- Authentication and authorization ----
-# Roles and permissions use Django's built-in auth (Groups + Permissions); sessions are server-side.
+# Roles and permissions are our own tables (users, roles, permissions); a custom auth backend
+# answers user.has_perm(). Sessions are server-side (Django's database session store).
 argon2-cffi==25.1.0                # Argon2 password hashing (first entry in PASSWORD_HASHERS)
 django-axes==8.3.1                 # lockout after repeated failed sign-ins
 django-otp==1.7.5                  # TOTP multi-factor sign-in for admins

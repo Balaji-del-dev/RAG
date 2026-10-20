@@ -49,6 +49,7 @@ TABLES = {
         ("config_json", "jsonb", ""),
         ("retrieval_definition_id", "uuid", "FK ADD"),
         ("generation_definition_id", "uuid", "FK ADD"),
+        ("created_by", "uuid → users", "N ADD"),
         ("published_at", "timestamptz", "N"),
         ("published_by", "uuid → users", "N ADD"),
     ]),

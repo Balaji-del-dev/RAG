@@ -52,12 +52,17 @@ Two practice pages sit next to the lessons:
 
 The interview content lives in `concepts/assets/qa/NN.js` (one file per lesson); `concepts/assets/path.js` holds the lesson order and renders navigation, questions and revision cards.
 
----|---|
-| 1 · Foundations | 01 how LLMs work · 02 tokens · 03 embeddings · 04 transformer architecture · 05 generation & decoding · 06 running models locally · 07 prompt engineering |
-| 2 · Ingestion pipeline | 08 RAG fundamentals · 09 parsing & OCR · 10 cleaning & metadata · 11 chunking · 12 embedding models · 13 vector indexing · 14 lexical search & BM25 |
-| 3 · Retrieval & answers | 15 query understanding · 16 hybrid search & RRF · 17 reranking · 18 grounded generation · 19 agents, tools & GraphRAG |
-| 4 · Quality | 20 evaluation · 21 observability & tracing |
-| 5 · Safety & production | 22 guardrails · 23 security (OWASP LLM Top 10) · 24 privacy & governance · 25 production engineering · 26 fine-tuning · 27 capstone |
+---
+
+## Build plan
+
+**[plan/README.md](plan/README.md)** turns this architecture into a plan for building it on one local CPU-only machine:
+
+- **[plan/01-backend.md](plan/01-backend.md):** the Django project in `backend/`, its 8 apps (`core`, `accounts`, `registry`, `documents`, `processing`, `indexing`, `retrieval`, `evaluation`), authentication and authorization, Celery tasks and processes.
+- **[plan/02-frontend.md](plan/02-frontend.md):** the React console in `console/`: pages per role, sign-in, streamed chat, uploads.
+- **[plan/03-database.md](plan/03-database.md):** the 42 PostgreSQL tables by app, status values, migration order, seed data, and the MinIO, Qdrant, OpenSearch and Redis setup.
+- **[plan/04-api.md](plan/04-api.md):** every endpoint, with its permission.
+- **[plan/execution/](plan/execution/README.md):** phases 0–9 with tasks, tests and "done when" checks, from machine setup to daily use.
 
 ---
 
@@ -125,7 +130,7 @@ These came from checking each new component against the brief's constraints (off
 | `processing_jobs.created_at`, `retrieval_runs.created_at` | The brief's recommended indexes use these columns. |
 | `outbox_events` table | Durable Celery dispatch and index sync (finding 3). |
 | 4.7 identity & access tables: `users`, `user_sessions`, `roles`, `permissions`, `role_permissions`, `user_roles`, `access_groups`, `user_access_groups`, `document_access_grants` | The brief has no authentication or authorization model. See the next section. |
-| `documents.created_by`, `retrieval_runs.user_id`, `user_feedback.user_id`, `pipeline_versions.published_by`, `evaluation_runs.approved_by`, `audit_events.actor_user_id` + `ip_address` | Record who uploaded, asked, published, approved and changed what. |
+| `documents.created_by`, `retrieval_runs.user_id`, `user_feedback.user_id`, `pipeline_versions.created_by` + `published_by`, `evaluation_runs.approved_by`, `audit_events.actor_user_id` + `ip_address` | Record who uploaded, asked, authored, published, approved and changed what. `pipeline_versions.created_by` lets the release approval check that the approver is not the author. |
 
 Two further recommendations:
 - **Chunk IDs:** `uuid5(namespace, document_version_id · pipeline_version_id · chunk_index · content_hash)`, used directly as the Qdrant point ID and the OpenSearch `_id`. Qdrant accepts only UUIDs or unsigned integers as point IDs. Retries then produce the same IDs, so they never duplicate records.
@@ -149,7 +154,7 @@ Two further recommendations:
 | Release approver | approve and publish a validated pipeline and index generation — never their own change |
 | Admin | manage users, roles, access groups and sessions; read the audit log |
 
-Roles map to Django `Group`s and their permissions to Django `Permission`s; DRF permission classes check them on every endpoint.
+Roles and permissions are the schema's own tables (`roles`, `permissions`, `role_permissions`, `user_roles`). A custom Django authentication backend answers `user.has_perm("rag.ask")` from them, and DRF permission classes call it on every endpoint. Django's built-in group tables stay unused.
 
 **Document access control.** Each document is shared with one or more access groups (`document_access_grants`). The index builder copies them into the Qdrant payload and an OpenSearch keyword field (`access_groups`). Every search adds the user's groups — read from the session, never from the request — as a mandatory filter in **both** engines, so text a user may not read never reaches the LLM. Granting or revoking access writes an `index.acl` outbox event that rewrites the field in both indexes. Citations, downloads and answer caches are checked against the same scope.
 
@@ -187,6 +192,8 @@ Query rewriting, multi-query, HyDE, decomposition, corrective retrieval and agen
 ```
 docs/
 ├── README.md
+├── plan/                      # build plan: backend, frontend, database, API, execution phases 0–9
+├── concepts/                  # 27 interview lessons + question bank + revision page
 ├── images/                    # rendered PNGs (2× scale)
 │   ├── 01-system-architecture.png
 │   ├── 02-database-architecture.png
