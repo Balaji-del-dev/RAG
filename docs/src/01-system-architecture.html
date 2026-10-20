@@ -5,7 +5,7 @@
 <title>RAG System Architecture</title>
 <link rel="stylesheet" href="diagram.css">
 <style>
-  :root { --c-minio: #c2410c; --c-redis: #b91c1c; --c-quality: #6d28d9; }
+  :root { --c-minio: #c2410c; --c-redis: #b91c1c; --c-quality: #6d28d9; --c-sec: #a16207; }
   #canvas { width: 2560px; }
   .inset { margin-left: 70px; margin-right: 70px; }
 
@@ -27,6 +27,15 @@
   .grp { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
   .grp .lbl { width: 118px; flex: none; font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
   .api .chip { background: #f8fafc; border-color: var(--line); color: var(--ink-2); }
+  .secrow { margin-top: 16px; border: 1.5px solid #ecd9a0; background: #fffcf2; border-radius: 14px; padding: 12px 14px 14px; }
+  .secrow .sh { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; font-size: 13px; color: var(--ink-2); }
+  .secrow .sh .k { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #fff; background: var(--c-sec); border-radius: 5px; padding: 2px 8px; }
+  .secrow .sh b { color: #713f12; }
+  .comp.sec { border-color: #ecd9a0; }
+  .comp.sec h3 { color: #854d0e; }
+  .mod.login { border-color: #ecd9a0; background: #fffcf2; } .mod.login h3 { color: #854d0e; }
+  .side.auth { border-color: #ecd9a0; background: #fffcf2; color: #713f12; } .side.auth b { color: #854d0e; }
+  .q.authq { border-color: #ecd9a0; background: #fffcf2; } .q.authq .h { color: #854d0e; }
 
   .core { display: grid; grid-template-columns: 860px 360px 876px; column-gap: 112px; margin-top: 92px; align-items: stretch; }
   .col { padding: 30px 20px 18px; }
@@ -107,9 +116,10 @@
   .minio pre { margin-top: 9px; font-size: 12px; line-height: 1.5; color: #431407; background: #fff; border: 1px solid #f1d5c2; border-radius: 10px; padding: 8px 11px; }
   .risk { margin-top: 9px; font-size: 12.3px; color: #7f1d1d; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 9px; padding: 7px 10px; line-height: 1.45; }
   .pg { border-color: #9fb6cf; background: #f6f9fc; } .pg h3 { color: var(--c-pg); }
-  .pg .cols { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 12px; }
+  .pg .cols { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-top: 12px; }
   .pg .g { background: #fff; border: 1px solid #c9d6e4; border-radius: 10px; padding: 8px 10px; }
   .pg .g .t { font-size: 11.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--c-pg); }
+  .pg .g.idg { border-color: #ecd9a0; background: #fffcf2; } .pg .g.idg .t { color: #854d0e; }
   .pg .g .l { font-size: 11.6px; color: var(--ink-2); line-height: 1.5; margin-top: 3px; font-family: "Noto Sans Mono", monospace; }
 
   /* quality & operations */
@@ -139,7 +149,7 @@
   <div class="title-row">
     <div>
       <h1>Offline Hybrid RAG Platform — System Architecture (v2)</h1>
-      <div class="sub">Upload-only ingestion · one application deployment · React · Django + DRF · Celery + Redis · PostgreSQL · MinIO · Qdrant · OpenSearch · LiteLLM → Ollama / vLLM · Langfuse · DeepEval</div>
+      <div class="sub">Upload-only ingestion · one application deployment · React · Django + DRF · auth + RBAC · Celery + Redis · PostgreSQL · MinIO · Qdrant · OpenSearch · LiteLLM → Ollama / vLLM · Langfuse · DeepEval</div>
     </div>
     <div class="legend">
       <span><i></i> synchronous call</span>
@@ -150,6 +160,7 @@
       <span><b class="sw" style="background:var(--c-pg)"></b><b class="sw" style="background:var(--c-minio)"></b> source of truth</span>
       <span><b class="sw" style="background:var(--c-qdrant)"></b><b class="sw" style="background:var(--c-os)"></b> derived indexes</span>
       <span><b class="sw" style="background:var(--c-quality)"></b> quality &amp; ops</span>
+      <span><b class="sw" style="background:var(--c-sec)"></b> identity &amp; access</span>
     </div>
   </div>
 
@@ -157,7 +168,8 @@
   <section class="panel band big inset" id="client">
     <div class="tag" style="background:var(--c-client)">1 · React application</div>
     <div class="row">
-      <div class="actor"><h3>Users · Admins · Evaluators</h3><div class="note">browser on the local network</div></div>
+      <div class="actor"><h3>Users · Admins · Evaluators</h3><div class="note">browser on the local network · every user signs in</div></div>
+      <div class="mod login"><h3>Sign-in &amp; Session</h3><div class="d">login page · session cookie + CSRF token · menus shown per role (display only — the server enforces)</div></div>
       <div class="mod"><h3>File Upload</h3><div class="d">multipart upload with progress; duplicate-detection message</div></div>
       <div class="mod"><h3>Document Management</h3><div class="d">versions, lifecycle status, retry, delete</div></div>
       <div class="mod"><h3>Pipeline Configuration</h3><div class="d">components, models, retrieval and generation settings; publish versions</div></div>
@@ -172,14 +184,24 @@
     <h2>Django + Django REST Framework — APIs, business logic and orchestration</h2>
     <div class="note" style="margin-bottom:12px">Django coordinates; Celery does the long-running work. Configuration JSON is schema-validated and mapped to allow-listed implementations.</div>
     <div class="row">
-      <div class="comp" id="c-rest"><h3>REST API</h3><div class="d">DRF views + serializers · OpenAPI schema · auth · rate limits</div></div>
+      <div class="comp" id="c-rest"><h3>REST API</h3><div class="d">DRF views + serializers · OpenAPI schema · authenticated by default · per-user rate limits</div></div>
       <div class="comp" id="c-upload"><h3>Upload Validation</h3><div class="d">extension · sniffed MIME (never the browser's) · size · content · SHA-256 duplicate check</div></div>
       <div class="comp" id="c-pipe"><h3>Pipeline Orchestrator</h3><div class="d">creates jobs and <span class="mono">outbox_events</span> in one transaction; the dispatcher publishes them to Celery</div></div>
       <div class="comp" id="c-query"><h3>Query Orchestrator</h3><div class="d">runs the online RAG flow synchronously and streams the answer</div></div>
       <div class="comp" id="c-reg"><h3>Component &amp; Model Registry</h3><div class="d">pipeline versions · components · models · retrieval &amp; generation definitions</div></div>
     </div>
+    <div class="secrow" id="secrow">
+      <div class="sh"><span class="k">Identity &amp; access</span><span><b>Authentication</b> answers "who are you?" · <b>authorization</b> answers "what may you do?" — both enforced on the server, never by the UI or the LLM</span></div>
+      <div class="row">
+        <div class="comp sec" id="c-authn"><h3>Authentication</h3><div class="d">Django auth · local accounts with Argon2 password hashes, or optional LDAP / Active Directory · lockout after repeated failures · MFA (TOTP) for admins</div></div>
+        <div class="comp sec" id="c-sess"><h3>Sessions &amp; CSRF</h3><div class="d">server-side sessions (<span class="mono">user_sessions</span>) · HttpOnly + Secure + SameSite cookie · CSRF token on every write · idle and absolute timeout · revocable</div></div>
+        <div class="comp sec" id="c-rbac"><h3>Role-based authorization (RBAC)</h3><div class="d">roles → permissions, checked by DRF permission classes on every endpoint · Admin · Knowledge manager · Pipeline engineer · Evaluator · Release approver · User</div></div>
+        <div class="comp sec" id="c-acl"><h3>Document access control</h3><div class="d">access groups per document (<span class="mono">document_access_grants</span>) · the user's groups become a mandatory filter in Qdrant and OpenSearch · citations and downloads re-checked</div></div>
+        <div class="comp sec" id="c-svc"><h3>Service credentials</h3><div class="d">every backing service has its own login on the private network: PostgreSQL role · Redis password · MinIO keys · Qdrant API key · OpenSearch user · LiteLLM key</div></div>
+      </div>
+    </div>
     <div class="grp"><div class="lbl">Cross-cutting</div><div class="chips">
-      <span class="chip">request ID + trace ID</span><span class="chip">JSON-Schema validation</span><span class="chip">audit_events</span>
+      <span class="chip">request ID + trace ID</span><span class="chip">JSON-Schema validation</span><span class="chip">audit_events: sign-ins, role and access changes</span>
       <span class="chip">immutable published versions</span><span class="chip">idempotency keys</span><span class="chip">structured logs</span>
     </div></div>
   </section>
@@ -230,7 +252,7 @@
         <div class="steps">
           <div class="step"><div class="h"><b>10</b>Local embeddings</div><div class="s">pinned model and revision; batched</div></div>
           <div class="arrow-s">→</div>
-          <div class="step" style="flex:1.5"><div class="h"><b>11</b>Index builder</div><div class="s">upsert Qdrant points and bulk-index OpenSearch for one index generation, keyed by chunk ID</div></div>
+          <div class="step" style="flex:1.5"><div class="h"><b>11</b>Index builder</div><div class="s">upsert Qdrant points and bulk-index OpenSearch for one index generation, keyed by chunk ID, with the document's access groups</div></div>
         </div>
       </div>
       <div class="stage" id="s5" style="margin-bottom:16px">
@@ -241,7 +263,7 @@
           <div class="step"><div class="h"><b>13</b>Publish or fail</div><div class="s">publish only when both indexes pass; otherwise mark failed, retry or reconcile</div></div>
         </div>
       </div>
-      <div class="note foot"><b>First release formats:</b> PDF · DOCX · XLSX · PPTX · TXT · Markdown · CSV · JSON · XML · HTML. Image understanding, handwriting and visual embeddings come later, once the text/table pipeline is measurable.</div>
+      <div class="note foot"><b>Access changes:</b> granting or revoking a document's access group writes an <span class="mono">index.acl</span> outbox event; a worker rewrites <span class="mono">access_groups</span> in both indexes.<br><b>First release formats:</b> PDF · DOCX · XLSX · PPTX · TXT · Markdown · CSV · JSON · XML · HTML. Image understanding, handwriting and visual embeddings come later, once the text/table pipeline is measurable.</div>
     </section>
 
     <!-- 5 INDEXES -->
@@ -252,9 +274,9 @@
       <div class="gen"><div class="t">index_generations · g0042</div>
         <div class="l">qdrant_collection = <span class="mono">rag_chunks_g0042</span><br>opensearch_index = <span class="mono">rag_chunks_v042</span><br>status <span class="mono">BUILDING → VALIDATING → PUBLISHED</span></div></div>
       <div class="stack">
-        <div class="ix qd" id="qd"><h3>Qdrant</h3><ul><li>dense vectors · HNSW</li><li>collection per generation</li><li>point ID = chunk ID</li><li>payload filters: document, version, generation, page</li></ul></div>
+        <div class="ix qd" id="qd"><h3>Qdrant</h3><ul><li>dense vectors · HNSW</li><li>collection per generation</li><li>point ID = chunk ID</li><li>payload filters: document, version, generation, page, <b>access_groups</b></li></ul></div>
         <div class="gate">Published only after <b>both</b> indexes pass validation — never one ahead of the other.</div>
-        <div class="ix os" id="os"><h3>OpenSearch</h3><ul><li>BM25 full-text + exact keywords</li><li>versioned index per generation</li><li>explicit mappings &amp; analyzers</li><li><span class="mono">_id</span> = chunk ID</li></ul></div>
+        <div class="ix os" id="os"><h3>OpenSearch</h3><ul><li>BM25 full-text + exact keywords</li><li>versioned index per generation</li><li>explicit mappings &amp; analyzers</li><li><span class="mono">_id</span> = chunk ID</li><li><b>access_groups</b> keyword filter</li></ul></div>
       </div>
       <div class="gen"><div class="t">Rollback &amp; rebuild</div>
         <div class="l">the previous generation stays until nothing references it · both indexes can be rebuilt from canonical chunks in PostgreSQL (vectors are re-embedded)</div></div>
@@ -267,11 +289,12 @@
       <div class="note">an answer is not grounded just because the LLM returned text</div>
       <div class="rgrid">
         <div>
-          <div class="q accent" id="q1"><div class="h">Request validation</div><div class="s">schema and length checks · create request ID and trace ID</div></div>
+          <div class="q authq" id="q1"><div class="h">Authenticate &amp; validate request</div><div class="s">valid session + CSRF · role has <span class="mono">rag.ask</span> · schema and length checks · request ID and trace ID</div></div>
+          <div class="q authq" id="q1b"><div class="h">Resolve access scope</div><div class="s">the user's access groups from PostgreSQL — taken from the session, never from the request</div></div>
           <div class="q" id="q2"><div class="h">Query understanding &amp; planning</div><div class="s">normalize and classify · select the published pipeline + index generation · build the retrieval plan</div></div>
           <div class="q par" id="qpar"><div class="h">Hybrid retrieval — both run in parallel</div>
-            <div class="sub dense" id="qa"><div class="h"><span class="k" style="background:var(--c-qdrant)">QDRANT</span>Dense retrieval</div><div class="s">embed query locally · top-k · payload filter</div></div>
-            <div class="sub lex" id="qb"><div class="h"><span class="k" style="background:var(--c-os)">OPENSEARCH</span>Lexical retrieval</div><div class="s">BM25 · top-k · same filter</div></div>
+            <div class="sub dense" id="qa"><div class="h"><span class="k" style="background:var(--c-qdrant)">QDRANT</span>Dense retrieval</div><div class="s">embed query locally · top-k · filter: generation + access groups</div></div>
+            <div class="sub lex" id="qb"><div class="h"><span class="k" style="background:var(--c-os)">OPENSEARCH</span>Lexical retrieval</div><div class="s">BM25 · top-k · same filter, incl. access groups</div></div>
           </div>
           <div class="q" id="q4"><div class="h">RRF fusion &amp; deduplication</div><div class="s">normalize candidates · Σ 1/(k + rank), k = 60 · dedupe by chunk</div></div>
           <div class="q" id="q5"><div class="h">Cross-encoder reranker</div><div class="s">local model · optional MMR and parent expansion</div></div>
@@ -280,9 +303,10 @@
           <div class="q llm" id="q7"><div class="h">Grounded generation</div><div class="s">grounded prompt → <b>LiteLLM</b> gateway (routing, retries, timeouts) → <b>Ollama or vLLM</b></div></div>
           <div class="q" id="q8"><div class="h">Output &amp; citation validation</div><div class="s">answer schema · citation references · grounding and safety checks</div></div>
           <div class="dec" id="d2">Valid answer?</div>
-          <div class="q answer" id="q9"><div class="h">Persist answer &amp; evidence → respond</div><div class="s">answer, citations and status back to React</div></div>
+          <div class="q answer" id="q9"><div class="h">Persist answer &amp; evidence → respond</div><div class="s">answer, citations and status back to React · citations link only to documents the user may open</div></div>
         </div>
         <div style="position:relative">
+          <div class="side auth" id="n0" style="position:absolute; left:0; right:0;"><b>401 / 403</b>not signed in or not permitted — nothing is retrieved</div>
           <div class="side" id="n1" style="position:absolute; left:0; right:0;"><b>Abstain or ask</b>no answer is generated; ask a clarifying question</div>
           <div class="side" id="n2" style="position:absolute; left:0; right:0;"><b>Reject, repair once or abstain</b>never return an unvalidated answer</div>
         </div>
@@ -305,7 +329,7 @@ rag-exports/evaluations/&lt;run_id&gt;/…</pre>
       </div>
       <div class="store pg" id="pg">
         <h3>PostgreSQL <span class="role" style="background:var(--c-pg)">metadata &amp; lifecycle</span></h3>
-        <div class="d">Configuration, document lifecycle, canonical chunk text, jobs, index state, query history, evaluation and audit — 33 tables in six groups.</div>
+        <div class="d">Configuration, document lifecycle, canonical chunk text, jobs, index state, query history, evaluation, audit, users and permissions — 42 tables in seven groups.</div>
         <div class="cols">
           <div class="g"><div class="t">4.1 Config</div><div class="l">pipeline_definitions<br>pipeline_versions<br>pipeline_steps<br>component_definitions<br>model_definitions<br>retrieval_definitions<br>generation_definitions</div></div>
           <div class="g"><div class="t">4.2 Documents</div><div class="l">documents<br>document_versions<br>document_metadata<br>extracted_artifacts<br>storage_objects</div></div>
@@ -313,6 +337,7 @@ rag-exports/evaluations/&lt;run_id&gt;/…</pre>
           <div class="g"><div class="t">4.4 Index</div><div class="l">index_generations<br>index_build_jobs<br>index_memberships<br>index_validations<br>outbox_events</div></div>
           <div class="g"><div class="t">4.5 Retrieval</div><div class="l">retrieval_runs<br>retrieval_results<br>answer_records<br>user_feedback<br>failure_cases</div></div>
           <div class="g"><div class="t">4.6 Eval &amp; audit</div><div class="l">evaluation_datasets<br>evaluation_cases<br>evaluation_runs<br>evaluation_results<br>audit_events</div></div>
+          <div class="g idg"><div class="t">4.7 Identity &amp; access</div><div class="l">users<br>user_sessions<br>roles<br>permissions<br>role_permissions<br>user_roles<br>access_groups<br>user_access_groups<br>document_access_grants</div></div>
         </div>
       </div>
     </div>
@@ -342,12 +367,13 @@ rag-exports/evaluations/&lt;run_id&gt;/…</pre>
         <li>Index publication waits for validation across both search systems.</li>
         <li>An answer is not grounded just because the LLM returned text.</li>
         <li>All model files and runtime dependencies are available locally.</li>
+        <li>Every request is authenticated; permissions are enforced by the server and as retrieval filters — never by the UI or the LLM.</li>
       </ol>
     </section>
     <section class="panel scope">
       <h3>Explicit scope</h3>
       <div class="lbl">In scope</div>
-      <div class="chips"><span class="chip in">upload-only ingestion</span><span class="chip in">one application deployment</span><span class="chip in">release validation as app workflows + manual steps</span></div>
+      <div class="chips"><span class="chip in">upload-only ingestion</span><span class="chip in">one application deployment</span><span class="chip in">release validation as app workflows + manual steps</span><span class="chip in">sign-in, roles &amp; document access groups</span></div>
       <div class="lbl">Out of scope</div>
       <div class="chips"><span class="chip out">external connectors</span><span class="chip out">web-search fallback</span><span class="chip out">multi-tenancy</span><span class="chip out">Docker</span><span class="chip out">Kubernetes</span><span class="chip out">CI/CD platform</span><span class="chip out">Prometheus</span><span class="chip out">Logstash / ELK</span></div>
     </section>
@@ -364,6 +390,7 @@ function placeSide(id, anchorId) {
   const parent = side.parentElement.getBoundingClientRect(), r = a.getBoundingClientRect();
   side.style.top = (r.top - parent.top + r.height / 2 - side.getBoundingClientRect().height / 2) + "px";
 }
+placeSide("n0", "q1");
 placeSide("n1", "d1");
 placeSide("n2", "d2");
 whenLaidOut(() => {
@@ -375,7 +402,7 @@ whenLaidOut(() => {
   drawEdges([
     // 1 -> 2
     { from: ['client', 'bottom'], fromX: ['c-rest', 'cx'], to: ['api', 'top'], toX: ['c-rest', 'cx'], color: c.client, both: true,
-      label: 'HTTPS · JSON · multipart upload · streamed answers', width: 2.4 },
+      label: 'HTTPS · session cookie + CSRF · JSON · multipart upload · streamed answers', width: 2.4 },
 
     // 2 -> durable layer (upload path) through the left gutter
     { from: ['api', 'left', 0.62], to: ['durable', 'left', 0.40], x: ['canvas', 'left', 88], color: c.mn, width: 2.4, seg: 1,
@@ -400,7 +427,9 @@ whenLaidOut(() => {
     { from: ['qb', 'left', 0.5], to: ['os', 'right', 0.5], color: c.os, label: 'BM25<br>top-k', width: 2.3, x: ['idx', 'right', 76] },
 
     // online flow
-    { from: ['q1', 'bottom'], to: ['q2', 'top'], color: soft, width: 2 },
+    { from: ['q1', 'bottom'], to: ['q1b', 'top'], color: soft, width: 2, label: 'allowed' },
+    { from: ['q1', 'right'], to: ['n0', 'left'], color: no, width: 2, label: 'no' },
+    { from: ['q1b', 'bottom'], to: ['q2', 'top'], color: soft, width: 2 },
     { from: ['q2', 'bottom'], to: ['qpar', 'top'], color: soft, width: 2 },
     { from: ['qpar', 'bottom'], to: ['q4', 'top'], color: soft, width: 2 },
     { from: ['q4', 'bottom'], to: ['q5', 'top'], color: soft, width: 2 },

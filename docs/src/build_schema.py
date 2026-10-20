@@ -27,6 +27,7 @@ DOMAINS = {
     "D": ("4.4 · Index lifecycle", "#0e7490", "#f6fcfd", "#b9dfe7"),
     "E": ("4.5 · Retrieval, answers & feedback", "#1d4ed8", "#f8faff", "#c9d7f7"),
     "F": ("4.6 · Evaluation & audit", "#be185d", "#fff8fb", "#f2c6d8"),
+    "G": ("4.7 · Identity & access — authentication and authorization", "#a16207", "#fffcf2", "#ecd9a0"),
 }
 
 # (column, type, flags) — flags: PK, FK, UQ, IX, N (nullable), ADD (recommended addition)
@@ -49,6 +50,7 @@ TABLES = {
         ("retrieval_definition_id", "uuid", "FK ADD"),
         ("generation_definition_id", "uuid", "FK ADD"),
         ("published_at", "timestamptz", "N"),
+        ("published_by", "uuid → users", "N ADD"),
     ]),
     "component_definitions": ("A", [
         ("id", "uuid", "PK"),
@@ -101,6 +103,7 @@ TABLES = {
         ("mime_type", "varchar(120)", ""),
         ("current_version_id", "uuid → versions", "N"),
         ("lifecycle_status", "enum", "IX"),
+        ("created_by", "uuid", "FK ADD"),
         ("created_at", "timestamptz", ""),
         ("updated_at", "timestamptz", ""),
         ("deleted_at", "timestamptz", "N"),
@@ -257,6 +260,7 @@ TABLES = {
     "retrieval_runs": ("E", [
         ("id", "uuid", "PK"),
         ("request_id", "uuid", "UQ"),
+        ("user_id", "uuid", "FK IX ADD"),
         ("query_text", "text", ""),
         ("normalized_query", "text", ""),
         ("pipeline_version_id", "uuid", "FK"),
@@ -290,6 +294,7 @@ TABLES = {
     "user_feedback": ("E", [
         ("id", "uuid", "PK"),
         ("answer_id", "uuid", "FK"),
+        ("user_id", "uuid", "FK ADD"),
         ("rating", "smallint", ""),
         ("feedback_text", "text", "N"),
         ("created_at", "timestamptz", ""),
@@ -327,6 +332,7 @@ TABLES = {
         ("summary_json", "jsonb", ""),
         ("started_at", "timestamptz", ""),
         ("completed_at", "timestamptz", "N"),
+        ("approved_by", "uuid → users", "N ADD"),
     ]),
     "evaluation_results": ("F", [
         ("id", "uuid", "PK"),
@@ -343,13 +349,85 @@ TABLES = {
         ("entity_type", "varchar(60)", ""),
         ("entity_id", "uuid", ""),
         ("actor", "varchar(150)", ""),
+        ("actor_user_id", "uuid → users", "N ADD"),
+        ("ip_address", "inet", "N ADD"),
         ("details_json", "jsonb", ""),
         ("created_at", "timestamptz", "IX"),
+    ]),
+    # ---------------------------------------------------------------- 4.7 identity & access
+    "users": ("G", [
+        ("id", "uuid", "PK"),
+        ("username", "varchar(150)", "UQ"),
+        ("email", "varchar(254)", "UQ"),
+        ("display_name", "varchar(150)", ""),
+        ("password_hash", "varchar(128)", "N"),
+        ("auth_source", "enum", ""),
+        ("is_active", "boolean", ""),
+        ("mfa_enabled", "boolean", ""),
+        ("failed_login_count", "smallint", ""),
+        ("locked_until", "timestamptz", "N"),
+        ("last_login", "timestamptz", "N"),
+        ("created_at", "timestamptz", ""),
+    ]),
+    "roles": ("G", [
+        ("id", "uuid", "PK"),
+        ("name", "varchar(60)", "UQ"),
+        ("description", "text", "N"),
+        ("is_system", "boolean", ""),
+    ]),
+    "permissions": ("G", [
+        ("id", "uuid", "PK"),
+        ("codename", "varchar(100)", "UQ"),
+        ("description", "text", "N"),
+    ]),
+    "role_permissions": ("G", [
+        ("id", "uuid", "PK"),
+        ("role_id", "uuid", "FK UQ"),
+        ("permission_id", "uuid", "FK UQ"),
+    ]),
+    "user_roles": ("G", [
+        ("id", "uuid", "PK"),
+        ("user_id", "uuid", "FK UQ"),
+        ("role_id", "uuid", "FK UQ"),
+        ("granted_by", "uuid → users", "N"),
+        ("granted_at", "timestamptz", ""),
+    ]),
+    "access_groups": ("G", [
+        ("id", "uuid", "PK"),
+        ("name", "varchar(100)", "UQ"),
+        ("description", "text", "N"),
+        ("created_at", "timestamptz", ""),
+    ]),
+    "user_access_groups": ("G", [
+        ("id", "uuid", "PK"),
+        ("user_id", "uuid", "FK UQ"),
+        ("access_group_id", "uuid", "FK UQ"),
+        ("granted_at", "timestamptz", ""),
+    ]),
+    "document_access_grants": ("G", [
+        ("id", "uuid", "PK"),
+        ("document_id", "uuid", "FK UQ"),
+        ("access_group_id", "uuid", "FK UQ"),
+        ("access_level", "enum", ""),
+        ("granted_by", "uuid → users", "N"),
+        ("granted_at", "timestamptz", ""),
+    ]),
+    "user_sessions": ("G", [
+        ("id", "uuid", "PK"),
+        ("user_id", "uuid", "FK IX"),
+        ("session_key_hash", "char(64)", "UQ"),
+        ("ip_address", "inet", "N"),
+        ("user_agent", "text", "N"),
+        ("created_at", "timestamptz", ""),
+        ("last_seen_at", "timestamptz", ""),
+        ("expires_at", "timestamptz", "IX"),
+        ("revoked_at", "timestamptz", "N"),
     ]),
 }
 
 # Header tags: tables the brief marks optional, and tables this design adds.
 TABLE_TAGS = {"storage_objects": "OPTIONAL", "outbox_events": "ADDED"}
+TABLE_TAGS.update({n: "ADDED" for n, (d, _) in TABLES.items() if d == "G"})
 
 # (child, fk column, parent, kind)  kind: "1" = mandatory, "0" = nullable
 EDGES = [
@@ -392,14 +470,29 @@ EDGES = [
     ("evaluation_runs", "index_generation_id", "index_generations", "1"),
     ("evaluation_results", "evaluation_run_id", "evaluation_runs", "1"),
     ("evaluation_results", "evaluation_case_id", "evaluation_cases", "1"),
+    # 4.7 identity & access
+    ("documents", "created_by", "users", "1"),
+    ("retrieval_runs", "user_id", "users", "1"),
+    ("user_feedback", "user_id", "users", "1"),
+    ("user_roles", "user_id", "users", "1"),
+    ("user_roles", "role_id", "roles", "1"),
+    ("role_permissions", "role_id", "roles", "1"),
+    ("role_permissions", "permission_id", "permissions", "1"),
+    ("user_access_groups", "user_id", "users", "1"),
+    ("user_access_groups", "access_group_id", "access_groups", "1"),
+    ("document_access_grants", "document_id", "documents", "1"),
+    ("document_access_grants", "access_group_id", "access_groups", "1"),
+    ("user_sessions", "user_id", "users", "1"),
 ]
 
 # Hand-planned grid (top-left corner of each table, in points; y grows downwards).
 # Top row: 4.1 configuration · 4.4 index lifecycle · 4.6 evaluation & audit.
-# Bottom row: 4.2 documents · 4.3 processing & chunks · 4.5 retrieval & feedback.
+# Middle row: 4.2 documents · 4.3 processing & chunks · 4.5 retrieval & feedback.
+# Bottom row: 4.7 identity & access, spread under all columns.
 # Gaps between columns are routing gutters for the FK lines.
 X = [0, 400, 790, 1220, 1640, 2080, 2480]
 ROW2 = 940
+ROW3 = ROW2 + 900
 LAYOUT = {
     # 4.1
     "pipeline_definitions": (X[0], 0),
@@ -440,6 +533,16 @@ LAYOUT = {
     "retrieval_results": (X[6], ROW2),
     "answer_records": (X[6], ROW2 + 290),
     "user_feedback": (X[5], ROW2 + 540),
+    # 4.7
+    "document_access_grants": (X[0], ROW3),
+    "access_groups": (X[1], ROW3),
+    "user_access_groups": (X[2], ROW3),
+    "users": (X[3], ROW3),
+    "user_roles": (X[4], ROW3),
+    "user_sessions": (X[4], ROW3 + 230),
+    "roles": (X[5], ROW3),
+    "role_permissions": (X[6], ROW3),
+    "permissions": (X[5], ROW3 + 170),
 }
 
 FONT = "Helvetica"

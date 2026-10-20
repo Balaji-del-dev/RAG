@@ -27,7 +27,7 @@
   <div class="title-row">
     <div>
       <h1>PostgreSQL Database Schema — Offline Hybrid RAG Platform (v2)</h1>
-      <div class="sub">Section 4 of the v2 brief as PostgreSQL tables · {{STATS}} · MinIO holds file bytes, Qdrant and OpenSearch hold derived copies keyed by <span class="mono">chunks.id</span></div>
+      <div class="sub">Section 4 of the v2 brief plus identity &amp; access, as PostgreSQL tables · {{STATS}} · MinIO holds file bytes, Qdrant and OpenSearch hold derived copies keyed by <span class="mono">chunks.id</span></div>
     </div>
   </div>
 
@@ -52,6 +52,7 @@
         <li><span class="addrow">column <b style="color:#b45309">+</b></span> added column: <span class="mono">pipeline_versions.retrieval_definition_id</span>, <span class="mono">.generation_definition_id</span> (the brief leaves both definitions unreferenced); <span class="mono">chunks.pipeline_version_id</span> (chunks of one version re-processed by another pipeline must not collide); <span class="mono">processing_jobs.created_at</span> and <span class="mono">retrieval_runs.created_at</span> (the recommended indexes need them)</li>
         <li><span class="newtag">ADDED</span> <span class="mono">outbox_events</span> — durable Celery dispatch and index sync events, written in the same transaction as the job or chunk rows</li>
         <li><span class="newtag">OPTIONAL</span> <span class="mono">storage_objects</span> — shared MinIO object registry, as the brief describes</li>
+        <li><span class="newtag">ADDED</span> <b>4.7 Identity &amp; access</b> — authentication (<span class="mono">users</span>, <span class="mono">user_sessions</span>) and authorization: roles → permissions (RBAC) and document access groups. In Django: custom <span class="mono">AUTH_USER_MODEL</span>; roles = <span class="mono">Group</span>, permissions = <span class="mono">Permission</span>. Who-did-it columns <span class="addrow">+</span> on <span class="mono">documents</span>, <span class="mono">retrieval_runs</span>, <span class="mono">user_feedback</span>, <span class="mono">pipeline_versions</span>, <span class="mono">evaluation_runs</span>, <span class="mono">audit_events</span></li>
       </ul>
     </div>
     <div class="box">
@@ -64,6 +65,8 @@
         <li><span class="mono">index_generations (pipeline_version_id, generation_number)</span> UQ</li>
         <li><span class="mono">index_memberships (index_generation_id, chunk_id)</span> UQ · <span class="mono">(index_generation_id, document_version_id)</span></li>
         <li><span class="mono">retrieval_results (retrieval_run_id, fusion_rank)</span> · <span class="mono">evaluation_results (run, case, metric_name)</span></li>
+        <li><span class="mono">users</span> username UQ, email UQ · <span class="mono">user_sessions</span> session_key_hash UQ, <span class="mono">(user_id, expires_at)</span></li>
+        <li><span class="mono">user_roles</span>, <span class="mono">role_permissions</span>, <span class="mono">user_access_groups</span>, <span class="mono">document_access_grants</span> — one row per pair (UQ)</li>
       </ul>
     </div>
     <div class="box">
@@ -72,6 +75,7 @@
         <li>self references: <span class="mono">document_versions.parent_version_id</span>, <span class="mono">chunks.parent_chunk_id</span></li>
         <li><span class="mono">documents.current_version_id → document_versions</span> (nullable, deferrable)</li>
         <li>polymorphic references: <span class="mono">outbox_events.aggregate_id</span>, <span class="mono">audit_events.entity_id</span></li>
+        <li>who-did-it references to <span class="mono">users</span>: <span class="mono">pipeline_versions.published_by</span>, <span class="mono">evaluation_runs.approved_by</span>, <span class="mono">audit_events.actor_user_id</span>, <span class="mono">*.granted_by</span></li>
         <li>MinIO references are <span class="mono">(storage_bucket, storage_object_key)</span> pairs, matched to <span class="mono">storage_objects</span> when that registry is used</li>
       </ul>
     </div>
@@ -148,15 +152,21 @@ function route(graph, nodes) {
     return { a, b };
   };
   const free = (col, y, m = 16) => colNodes[col].every((n) => y < n.t - m || y > n.b + m);
-  // widest empty horizontal band across the whole diagram (between the two rows of domains)
+  // empty horizontal bands between the rows of domains; each edge prefers the band nearest to it
   const spans = Object.values(nodes).map((n) => [n.t, n.b]).sort((a, b) => a[0] - b[0]);
-  let band = null, reach = spans[0][1];
+  const bands = [];
+  let reach = spans[0][1];
   for (const [t, b] of spans.slice(1)) {
-    if (t > reach && (!band || t - reach > band.b - band.a)) band = { a: reach, b: t };
+    if (t > reach + 60) bands.push({ a: reach, b: t });
     reach = Math.max(reach, b);
   }
-  // keep clear of the region frames and labels that sit inside the band
-  const bandMid = band ? band.a + (band.b - band.a) * 0.38 : null;
+  // keep clear of the region frames and labels that sit inside a band
+  const midOf = (bd) => bd.a + (bd.b - bd.a) * 0.38;
+  const bandMidFor = (ya, yb) => {
+    if (!bands.length) return null;
+    const m = (ya + yb) / 2;
+    return bands.map(midOf).reduce((best, y) => (Math.abs(y - m) < Math.abs(best - m) ? y : best));
+  };
 
   // 1) decide geometry per edge
   const plans = EDGES.map((e) => {
@@ -168,6 +178,7 @@ function route(graph, nodes) {
     else { s0 = -1; s1 = 1; g0 = P.col - 1; g1 = C.col; }
     const x0 = s0 > 0 ? P.r : P.l, x1 = s1 > 0 ? C.r : C.l;
     let yc = null;
+    const bandMid = bandMidFor(y0, y1);
     if (g0 !== g1) {
       const lo = Math.min(g0, g1) + 1, hi = Math.max(g0, g1);
       const between = []; for (let c = lo; c <= hi; c++) between.push(c);

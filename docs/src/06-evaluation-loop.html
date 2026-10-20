@@ -23,6 +23,7 @@
   .node.rel { border-color: #86c49b; background: #f4fbf6; }
   .node.pub { background: #15803d; border-color: #15803d; } .node.pub .t, .node.pub .d { color: #fff; }
   .self { align-self: center; }
+  .a-auth { background: #a16207; }
 </style>
 </head>
 <body>
@@ -38,14 +39,14 @@
     </div>
     <div class="legend">
       <span><span class="ac a-celery">Celery</span></span><span><span class="ac a-deepeval">DeepEval</span></span><span><span class="ac a-langfuse">Langfuse</span></span>
-      <span><span class="ac a-pg">PostgreSQL</span></span><span><span class="ac a-react">React</span></span><span><span class="ac a-human">Reviewer</span></span>
+      <span><span class="ac a-pg">PostgreSQL</span></span><span><span class="ac a-react">React</span></span><span><span class="ac a-human">Reviewer</span></span><span><span class="ac a-auth">Role required</span></span>
     </div>
   </div>
 
   <div class="loop" id="loop">
     <!-- centre: measure -->
     <div class="node gold c2 r0" id="n-gold"><div class="t">Golden evaluation dataset</div><div class="d">versioned <span class="mono">evaluation_datasets</span> + <span class="mono">evaluation_cases</span>: question, expected answer, expected sources, case type (edge and abstention cases included)</div><div class="actors"><span class="ac a-pg">PostgreSQL</span></div></div>
-    <div class="node c2 r1" id="n-run"><div class="t">Run candidate pipeline</div><div class="d">Celery <span class="mono">evaluation</span> task runs the candidate pipeline version + index generation on every case → <span class="mono">evaluation_runs</span></div><div class="actors"><span class="ac a-celery">Celery</span><span class="ac a-pg">PostgreSQL</span></div></div>
+    <div class="node c2 r1" id="n-run"><div class="t">Run candidate pipeline</div><div class="d">Celery <span class="mono">evaluation</span> task runs the candidate pipeline version + index generation on every case → <span class="mono">evaluation_runs</span> · as an evaluation service account whose access groups cover the dataset's documents</div><div class="actors"><span class="ac a-celery">Celery</span><span class="ac a-pg">PostgreSQL</span><span class="ac a-auth">Evaluator starts it</span></div></div>
 
     <div class="node metric c1 r2" id="n-m1"><div class="t">Retrieval metrics</div><div class="d">recall@k · MRR · nDCG@k · hit rate against <span class="mono">expected_sources</span>, per case type</div><div class="actors"><span class="ac a-celery">Celery</span></div></div>
     <div class="node metric c2 r2" id="n-m2"><div class="t">Generation &amp; citation metrics</div><div class="d">faithfulness · answer relevancy · contextual precision and recall · citation validity and coverage · correct abstentions — local LLM judge</div><div class="actors"><span class="ac a-deepeval">DeepEval</span></div></div>
@@ -55,11 +56,11 @@
     <div class="dec c2 r4" id="n-dec">Acceptance criteria met?<span class="s">thresholds per metric · no regression beyond tolerance on any case type · latency budget</span></div>
 
     <!-- left loop: improve -->
-    <div class="node fail c0 r1" id="n-imp"><div class="t">Improve parsing, chunking, retrieval or prompt</div><div class="d">change one variable at a time → new draft <span class="mono">pipeline_version</span> (and a new index generation when indexing changes)</div><div class="actors"><span class="ac a-django">Registry</span></div></div>
-    <div class="node fail c0 r4" id="n-ana"><div class="t">Analyze failure cases</div><div class="d"><span class="mono">failure_cases</span>: type, root cause, review status — grouped into parsing, chunking, retrieval or generation; traces in Langfuse</div><div class="actors"><span class="ac a-human">Reviewer</span><span class="ac a-langfuse">Langfuse</span></div></div>
+    <div class="node fail c0 r1" id="n-imp"><div class="t">Improve parsing, chunking, retrieval or prompt</div><div class="d">change one variable at a time → new draft <span class="mono">pipeline_version</span> (and a new index generation when indexing changes)</div><div class="actors"><span class="ac a-django">Registry</span><span class="ac a-auth">Pipeline engineer</span></div></div>
+    <div class="node fail c0 r4" id="n-ana"><div class="t">Analyze failure cases</div><div class="d"><span class="mono">failure_cases</span>: type, root cause, review status — grouped into parsing, chunking, retrieval or generation; traces in Langfuse</div><div class="actors"><span class="ac a-human">Reviewer</span><span class="ac a-langfuse">Langfuse</span><span class="ac a-auth">Evaluator</span></div></div>
 
     <!-- right loop: release & learn -->
-    <div class="node rel c4 r4" id="n-app"><div class="t">Manual release approval</div><div class="d">reviewer signs off in the Evaluation Dashboard → <span class="mono">audit_events</span></div><div class="actors"><span class="ac a-human">Reviewer</span><span class="ac a-react">React</span></div></div>
+    <div class="node rel c4 r4" id="n-app"><div class="t">Manual release approval</div><div class="d">a user with the <b>Release approver</b> role signs off in the Evaluation Dashboard — never the author of the candidate (four-eyes) → <span class="mono">evaluation_runs.approved_by</span>, <span class="mono">audit_events</span></div><div class="actors"><span class="ac a-human">Reviewer</span><span class="ac a-react">React</span><span class="ac a-auth">Release approver</span></div></div>
     <div class="node pub c4 r3" id="n-pub"><div class="t">Publish validated pipeline &amp; index</div><div class="d">pipeline version published (immutable) · index generation PUBLISHED · previous kept for rollback</div></div>
     <div class="node rel c4 r2" id="n-obs"><div class="t">Observe queries &amp; feedback</div><div class="d"><span class="mono">retrieval_runs</span> · <span class="mono">answer_records</span> · <span class="mono">user_feedback</span> · Langfuse traces</div><div class="actors"><span class="ac a-pg">PostgreSQL</span><span class="ac a-langfuse">Langfuse</span></div></div>
     <div class="node rel c4 r1" id="n-smp"><div class="t">Sample production quality</div><div class="d">periodic sample of real runs scored with DeepEval plus human review</div><div class="actors"><span class="ac a-deepeval">DeepEval</span><span class="ac a-human">Reviewer</span></div></div>
@@ -67,7 +68,7 @@
   </div>
 
   <div class="notes">
-    <section class="panel n"><h3>Release gate without CI/CD</h3><ul><li>evaluation runs are application workflows on Celery</li><li>approval is a manual, audited step in React</li><li>nothing publishes without a passing run on the current dataset version</li></ul></section>
+    <section class="panel n"><h3>Release gate without CI/CD</h3><ul><li>evaluation runs are application workflows on Celery</li><li>approval is a manual, audited step in React by the Release approver role — the approver is never the author</li><li>nothing publishes without a passing run on the current dataset version</li></ul></section>
     <section class="panel n"><h3>Trustworthy LLM judging</h3><ul><li>DeepEval's judge runs locally through Ollama — no external API</li><li>small judges are noisier: calibrate against human-labelled cases</li><li>keep the judge model and version fixed across compared runs</li></ul></section>
     <section class="panel n"><h3>Reproducible comparisons</h3><ul><li>runs pin dataset version, pipeline version and index generation</li><li>expected sources survive re-chunking (document + page / section)</li><li>per-case results make regressions visible, not just averages</li></ul></section>
     <section class="panel n"><h3>Advanced retrieval is earned</h3><ul><li>query rewriting, multi-query, HyDE, decomposition, corrective retrieval and agentic routing</li><li>each enabled only when this loop shows a measurable gain</li></ul></section>

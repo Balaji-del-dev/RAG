@@ -66,20 +66,20 @@ The interview content lives in `concepts/assets/qa/NN.js` (one file per lesson);
 ### 1. System architecture
 ![System architecture](images/01-system-architecture.png)
 
-The seven groups from the brief, laid out so their lines don't cross. Django sits above three columns: Celery processing, the two derived indexes, and the online RAG flow. Below them are the durable data layer and then quality & operations.
+The seven groups from the brief, laid out so their lines don't cross. Django sits above three columns: Celery processing, the two derived indexes, and the online RAG flow. Below them are the durable data layer and then quality & operations. An **Identity & access** row inside Django shows authentication, sessions, role-based authorization, document access control and service credentials; the online flow starts with *Authenticate & validate* and *Resolve access scope*.
 
 ### 2. Data & storage architecture
 ![Data and storage architecture](images/02-database-architecture.png)
 
-- **What each store owns:** the MinIO bucket and key layout, the PostgreSQL table groups (4.1–4.6), the outbox → Redis → Celery dispatch path, and the Qdrant and OpenSearch collection/index specs.
-- **Identity map:** which ID appears in which store, including Langfuse.
+- **What each store owns:** the MinIO bucket and key layout, the PostgreSQL table groups (4.1–4.7), the outbox → Redis → Celery dispatch path, and the Qdrant and OpenSearch collection/index specs, including the `access_groups` filter field.
+- **Identity map:** which ID appears in which store, including Langfuse, `user_id` and `access_groups`.
 - **Status lifecycles.**
 - **Four paths:** write, publish, read, and change/delete.
 
 ### 3. PostgreSQL schema
 ![Database schema](images/03-database-schema.png)
 
-The brief's section 4 as 33 tables and 39 foreign keys, with columns, types, nullability, keys and the recommended indexes. Additions beyond the brief are highlighted in the image: **+** marks added columns, **ADDED** marks an added table.
+The brief's section 4 plus a 4.7 identity & access group: 42 tables and 51 foreign keys, with columns, types, nullability, keys and the recommended indexes. Additions beyond the brief are highlighted in the image: **+** marks added columns, **ADDED** marks an added table.
 
 ### 4. Ingestion & indexing flow
 ![Ingestion flow](images/04-ingestion-flow.png)
@@ -124,10 +124,38 @@ These came from checking each new component against the brief's constraints (off
 | `chunks.pipeline_version_id` | Re-processing one document version with a new pipeline would otherwise collide on `(document_version_id, chunk_index)`. The unique key becomes `(document_version_id, pipeline_version_id, chunk_index)`. |
 | `processing_jobs.created_at`, `retrieval_runs.created_at` | The brief's recommended indexes use these columns. |
 | `outbox_events` table | Durable Celery dispatch and index sync (finding 3). |
+| 4.7 identity & access tables: `users`, `user_sessions`, `roles`, `permissions`, `role_permissions`, `user_roles`, `access_groups`, `user_access_groups`, `document_access_grants` | The brief has no authentication or authorization model. See the next section. |
+| `documents.created_by`, `retrieval_runs.user_id`, `user_feedback.user_id`, `pipeline_versions.published_by`, `evaluation_runs.approved_by`, `audit_events.actor_user_id` + `ip_address` | Record who uploaded, asked, published, approved and changed what. |
 
 Two further recommendations:
 - **Chunk IDs:** `uuid5(namespace, document_version_id · pipeline_version_id · chunk_index · content_hash)`, used directly as the Qdrant point ID and the OpenSearch `_id`. Qdrant accepts only UUIDs or unsigned integers as point IDs. Retries then produce the same IDs, so they never duplicate records.
 - **Which generation is live:** decided by one PostgreSQL commit (`index_generations.status = PUBLISHED`). Qdrant and OpenSearch can each switch an alias atomically, but not both together. So the query path reads the physical collection and index names from PostgreSQL; aliases are for operators only.
+
+## Authentication & authorization
+
+**Authentication — who are you?**
+- Django authentication with a custom user model (`users`). Local accounts store Argon2 password hashes; LDAP / Active Directory sign-in is optional (`auth_source`).
+- Server-side sessions (`user_sessions`): HttpOnly + Secure + SameSite cookie, a CSRF token on every write, idle and absolute timeouts, and revocation on logout or by an admin.
+- Lockout after repeated failed sign-ins (`failed_login_count`, `locked_until`); MFA (TOTP) for admins.
+
+**Authorization — what may you do?**
+
+| Role | May do |
+|---|---|
+| User | ask questions; open cited documents in their access groups; give feedback |
+| Knowledge manager | upload, version and delete documents; set each document's access groups |
+| Pipeline engineer | edit draft pipeline versions, models, retrieval and generation settings; start index builds |
+| Evaluator | manage evaluation datasets; run evaluations; review failure cases |
+| Release approver | approve and publish a validated pipeline and index generation — never their own change |
+| Admin | manage users, roles, access groups and sessions; read the audit log |
+
+Roles map to Django `Group`s and their permissions to Django `Permission`s; DRF permission classes check them on every endpoint.
+
+**Document access control.** Each document is shared with one or more access groups (`document_access_grants`). The index builder copies them into the Qdrant payload and an OpenSearch keyword field (`access_groups`). Every search adds the user's groups — read from the session, never from the request — as a mandatory filter in **both** engines, so text a user may not read never reaches the LLM. Granting or revoking access writes an `index.acl` outbox event that rewrites the field in both indexes. Citations, downloads and answer caches are checked against the same scope.
+
+**Service credentials.** PostgreSQL, Redis, MinIO, Qdrant, OpenSearch, Ollama and LiteLLM stay on the private network (localhost on a single machine), each with its own credentials from environment variables. Ollama has no login, so it must never listen on a public interface.
+
+**Audit.** `audit_events` records sign-ins, failed sign-ins, role and access-group changes, uploads, publications and deletions, with `actor_user_id` and `ip_address`.
 
 ## Index publication sequence
 

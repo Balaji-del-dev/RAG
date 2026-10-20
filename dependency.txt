@@ -81,6 +81,8 @@ Already installed: tesseract-ocr 5.3.4 with English (eng).
   libmagic1                     file type detection (python-magic) — NOT installed
   tesseract-ocr-tam / -hin      Tamil and Hindi OCR data — NOT installed
   libgl1, libglib2.0-0          image libraries needed by EasyOCR / OpenCV
+Optional — only for LDAP / Active Directory sign-in (django-auth-ldap):
+  sudo apt install libldap2-dev libsasl2-dev
 
 
 6. LOCAL MODELS (small, CPU-friendly; download once, no downloads at runtime)

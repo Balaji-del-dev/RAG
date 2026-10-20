@@ -39,6 +39,8 @@
   .grp .tables span { font-family: "Noto Sans Mono", monospace; font-size: 12px; background: #eef3f9; border: 1px solid #d4e0ec; color: #1e3a5f; border-radius: 6px; padding: 2px 7px; }
   .grp .gn { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; margin-top: 8px; }
   .grp.outbox { border-color: #94a3b8; border-style: dashed; background: #fbfcfd; }
+  .grp.idg { border-color: #ecd9a0; background: #fffcf2; }
+  .grp.idg .tables span { background: #fdf6dd; border-color: #ecd9a0; color: #713f12; }
   .tagx { font-size: 10px; font-weight: 800; color: #92400e; background: #fde68a; border-radius: 4px; padding: 1px 5px; margin-left: 6px; vertical-align: 2px; }
   .pg .rules ul { columns: 2; column-gap: 26px; }
 
@@ -103,7 +105,7 @@
   .fl.d { border-color: #f3c9ad; } .fl.d h3 { color: var(--c-minio); } .fl.d li::before { background: var(--c-minio); }
   .fl .mono { font-size: 12.2px; color: #111827; }
 
-  .callout { margin-top: 26px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .callout { margin-top: 26px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
   .co { border-radius: 14px; padding: 16px 18px; background: #0f172a; color: #e2e8f0; font-size: 13.3px; line-height: 1.55; }
   .co b { color: #fff; display: block; font-size: 14.5px; margin-bottom: 4px; }
   .co .mono { color: #fde68a; font-size: 12.5px; }
@@ -116,8 +118,8 @@
 
   <div class="title-row">
     <div>
-      <h1>Data &amp; Storage Architecture (v2) — ownership, identity and synchronisation</h1>
-      <div class="sub">PostgreSQL is the source of truth for metadata and lifecycle · MinIO for file contents · Qdrant and OpenSearch are derived, generation-versioned indexes</div>
+      <h1>Data &amp; Storage Architecture (v2) — ownership, identity, access and synchronisation</h1>
+      <div class="sub">PostgreSQL is the source of truth for metadata and lifecycle · MinIO for file contents · Qdrant and OpenSearch are derived, generation-versioned indexes · users, roles and access groups live in PostgreSQL and are copied into both indexes as filters</div>
     </div>
     <div class="legend">
       <span><i></i> reference by ID / object key</span>
@@ -161,7 +163,7 @@
     <section class="panel card pg" id="pg">
       <div class="tag" style="background:var(--c-pg)">Source of truth · metadata &amp; lifecycle</div>
       <h2>PostgreSQL <span class="role" style="background:var(--c-pg)">system of record</span></h2>
-      <div class="lead">Owns configuration, document lifecycle, canonical chunk text, jobs, index state, query history, evaluation and audit. Typed columns for IDs, scores, statuses and timestamps; <b>JSONB</b> for schema-validated configuration, citations and diagnostics.</div>
+      <div class="lead">Owns configuration, document lifecycle, canonical chunk text, jobs, index state, query history, evaluation, audit, users and permissions. Typed columns for IDs, scores, statuses and timestamps; <b>JSONB</b> for schema-validated configuration, citations and diagnostics.</div>
       <div class="groups">
         <div class="gcol">
           <div class="grp" id="g-cfg">
@@ -179,6 +181,11 @@
             <div class="tables"><span>processing_jobs</span><span>processing_step_runs</span><span>document_elements</span><span>chunks</span><span>chunk_relationships</span><span>embedding_records</span></div>
             <div class="gn">Full chunk text lives here; vectors live in Qdrant, with point ID and model version in <span class="mono">embedding_records</span>.</div>
           </div>
+          <div class="grp idg" id="g-iam">
+            <div class="gh"><span class="gt" style="color:#a16207">4.7 Identity &amp; access<span class="tagx">ADDED</span></span><span class="app">app: accounts</span></div>
+            <div class="tables"><span>users</span><span>user_sessions</span><span>roles</span><span>permissions</span><span>role_permissions</span><span>user_roles</span><span>access_groups</span><span>user_access_groups</span><span>document_access_grants</span></div>
+            <div class="gn"><b>Authentication:</b> Argon2 password hashes (or LDAP / AD), lockout and revocable server-side sessions. <b>Authorization:</b> roles → permissions (Django Groups) and document access groups. <span class="mono">documents.created_by</span>, <span class="mono">retrieval_runs.user_id</span> and <span class="mono">audit_events.actor_user_id</span> point here.</div>
+          </div>
         </div>
         <div class="gcol">
           <div class="grp" id="g-idx">
@@ -189,12 +196,12 @@
           <div class="grp outbox" id="g-out">
             <div class="gh"><span class="gt" style="color:#475569">Transactional outbox<span class="tagx">ADDED</span></span><span class="app">app: core</span></div>
             <div class="tables"><span>outbox_events</span></div>
-            <div class="gn">Written in the <b>same transaction</b> as the job, chunk or delete it announces: <span class="mono">job.dispatch</span>, <span class="mono">index.upsert</span>, <span class="mono">index.delete</span>.</div>
+            <div class="gn">Written in the <b>same transaction</b> as the job, chunk or delete it announces: <span class="mono">job.dispatch</span>, <span class="mono">index.upsert</span>, <span class="mono">index.delete</span>, <span class="mono">index.acl</span>.</div>
           </div>
           <div class="grp" id="g-ret">
             <div class="gh"><span class="gt" style="color:#1d4ed8">4.5 Retrieval, answers &amp; feedback</span><span class="app">app: retrieval</span></div>
             <div class="tables"><span>retrieval_runs</span><span>retrieval_results</span><span>answer_records</span><span>user_feedback</span><span>failure_cases</span></div>
-            <div class="gn"><span class="mono">request_id</span> and <span class="mono">trace_id</span> join a run to its Langfuse trace.</div>
+            <div class="gn"><span class="mono">request_id</span> and <span class="mono">trace_id</span> join a run to its Langfuse trace; <span class="mono">user_id</span> records who asked.</div>
           </div>
           <div class="grp" id="g-eval">
             <div class="gh"><span class="gt" style="color:#be185d">4.6 Evaluation &amp; audit</span><span class="app">app: evaluation</span></div>
@@ -246,8 +253,9 @@ LIMIT 200;</pre></li>
           <div class="k">Collection</div><div class="v"><span class="mono"><b>rag_chunks_g0042</b></span> — one per generation, recorded in <span class="mono">index_generations.qdrant_collection</span></div>
           <div class="k">Point ID</div><div class="v"><span class="mono">chunks.id</span> (UUID) — also kept as <span class="mono">qdrant_point_id</span> / <span class="mono">vector_point_id</span></div>
           <div class="k">Vector</div><div class="v">size = embedding model dimension · metric chosen for the model (usually Cosine) · HNSW</div>
-          <div class="k">Payload</div><div class="v"><span class="mono">chunk_id, document_id, document_version_id, index_generation_id, page_start, page_end, section_path, content_hash</span></div>
-          <div class="k">Payload idx</div><div class="v">keyword on <span class="mono">document_id</span>, <span class="mono">document_version_id</span>, <span class="mono">index_generation_id</span>; integer on <span class="mono">page_start</span></div>
+          <div class="k">Payload</div><div class="v"><span class="mono">chunk_id, document_id, document_version_id, index_generation_id, page_start, page_end, section_path, content_hash, <b>access_groups</b></span></div>
+          <div class="k">Payload idx</div><div class="v">keyword on <span class="mono">document_id</span>, <span class="mono">document_version_id</span>, <span class="mono">index_generation_id</span>, <span class="mono"><b>access_groups</b></span>; integer on <span class="mono">page_start</span></div>
+          <div class="k">Access</div><div class="v">every search carries a mandatory filter: <span class="mono">access_groups</span> matches any of the user's groups · API key required, bound to the private network</div>
           <div class="k">Rule</div><div class="v">one embedding model revision and dimension per collection</div>
         </div>
       </section>
@@ -257,9 +265,10 @@ LIMIT 200;</pre></li>
         <div class="kv">
           <div class="k">Index</div><div class="v"><span class="mono"><b>rag_chunks_v042</b></span> — versioned name per generation, recorded in <span class="mono">index_generations.opensearch_index</span></div>
           <div class="k">_id</div><div class="v"><span class="mono">chunks.id</span> — kept as <span class="mono">opensearch_document_id</span></div>
-          <div class="k">Mappings</div><div class="v">keyword: <span class="mono">chunk_id, document_id, document_version_id, index_generation_id, content_hash</span> · analyzed text: <span class="mono">text_content</span> · text + keyword: <span class="mono">filename, section_path</span> · integer: <span class="mono">page_start, page_end</span> · <span class="mono">dynamic: strict</span></div>
+          <div class="k">Mappings</div><div class="v">keyword: <span class="mono">chunk_id, document_id, document_version_id, index_generation_id, content_hash, <b>access_groups</b></span> · analyzed text: <span class="mono">text_content</span> · text + keyword: <span class="mono">filename, section_path</span> · integer: <span class="mono">page_start, page_end</span> · <span class="mono">dynamic: strict</span></div>
           <div class="k">Scoring</div><div class="v">BM25 baseline; analyzers and exact-match boosts only when evaluation shows a gain</div>
           <div class="k">Bulk build</div><div class="v"><span class="mono">refresh_interval: -1</span> while building, restored before validation</div>
+          <div class="k">Access</div><div class="v"><span class="mono">access_groups</span> in a bool <b>filter</b> clause (never <span class="mono">should</span>) · own service user + TLS</div>
         </div>
       </section>
     </div>
@@ -280,6 +289,8 @@ LIMIT 200;</pre></li>
         <tr class="key"><td>chunk_id</td><td><span class="mono">uuid5(NS, version_id · pipeline_version_id · chunk_index · content_hash)</span> — re-runs produce the same ID</td><td>chunks.id</td><td>—</td><td><b>point id</b></td><td><b>_id</b></td><td>span metadata</td></tr>
         <tr><td>index_generation_id</td><td>UUID + <span class="mono">generation_number</span> per pipeline version</td><td>index_generations.id</td><td>—</td><td>collection + payload</td><td>index + keyword</td><td>trace metadata</td></tr>
         <tr><td>request_id · trace_id</td><td>created when a question arrives</td><td>retrieval_runs</td><td>—</td><td>—</td><td>—</td><td><b>trace id</b></td></tr>
+        <tr><td>user_id</td><td>UUID when an account is created (or on first LDAP sign-in)</td><td>users.id · retrieval_runs.user_id</td><td>—</td><td>—</td><td>—</td><td>pseudonymized user id</td></tr>
+        <tr class="key"><td>access_groups</td><td>names of the groups granted on a document (<span class="mono">document_access_grants</span>)</td><td>access_groups.name</td><td>—</td><td><b>payload filter</b></td><td><b>keyword filter</b></td><td>—</td></tr>
       </table>
     </section>
 
@@ -296,6 +307,8 @@ LIMIT 200;</pre></li>
         <div class="flow"><span class="s n">QUEUED</span><span class="ar">→</span><span class="s g">RUNNING</span><span class="ar">→</span><span class="s a">SUCCEEDED</span><span class="ar">·</span><span class="s r">FAILED → RETRY</span><span class="ar">·</span><span class="s n">CANCELLED</span></div></div>
       <div class="lc"><div class="t">index_memberships.status · outbox_events.status</div>
         <div class="flow"><span class="s n">PENDING</span><span class="ar">→</span><span class="s a">INDEXED / DISPATCHED</span><span class="ar">·</span><span class="s r">FAILED → RETRY</span><span class="ar">·</span><span class="s n">REMOVED</span></div></div>
+      <div class="lc"><div class="t">users (is_active · locked_until) · user_sessions</div>
+        <div class="flow"><span class="s a">ACTIVE</span><span class="ar">→</span><span class="s r">LOCKED after failed sign-ins</span><span class="ar">→</span><span class="s a">ACTIVE</span><span class="ar">·</span><span class="s n">DISABLED</span><span class="ar">·</span><span class="s n">session EXPIRED / REVOKED</span></div></div>
       <div class="lc" style="margin-bottom:0"><div class="t">failure_cases.review_status</div>
         <div class="flow"><span class="s n">OPEN</span><span class="ar">→</span><span class="s b">IN_REVIEW</span><span class="ar">→</span><span class="s a">RESOLVED</span><span class="ar">·</span><span class="s n">WONT_FIX</span></div></div>
     </section>
@@ -307,8 +320,8 @@ LIMIT 200;</pre></li>
       <div class="tag" style="background:var(--c-ingest)">Write path</div>
       <h3>Upload &amp; ingest a document</h3>
       <ol>
-        <li>Django checks extension, sniffed MIME type, size and content, then SHA-256; an exact duplicate returns the existing status.</li>
-        <li>Original → MinIO under a generated key; <b>one transaction</b> writes <span class="mono">document_versions</span>, <span class="mono">processing_jobs</span> and an <span class="mono">outbox_events</span> row.</li>
+        <li>Django checks the user's upload permission and the access groups they assign, then extension, sniffed MIME type, size and content, then SHA-256; an exact duplicate returns the existing status.</li>
+        <li>Original → MinIO under a generated key; <b>one transaction</b> writes <span class="mono">document_versions</span>, <span class="mono">document_access_grants</span>, <span class="mono">processing_jobs</span> and an <span class="mono">outbox_events</span> row.</li>
         <li>The dispatcher publishes the Celery task via Redis; workers read MinIO and write artifacts back as <span class="mono">extracted_artifacts</span>.</li>
         <li>Canonical chunks and <span class="mono">embedding_records</span> go to PostgreSQL; the index builder fills Qdrant and OpenSearch and marks memberships.</li>
         <li>Failed steps keep their error; retries reuse the same chunk IDs, so nothing is duplicated.</li>
@@ -329,8 +342,8 @@ LIMIT 200;</pre></li>
       <div class="tag" style="background:var(--c-retrieval)">Read path</div>
       <h3>Answer a question</h3>
       <ol>
-        <li>Read the published <span class="mono">index_generation</span> → both physical names; create <span class="mono">retrieval_runs</span> with request and trace IDs.</li>
-        <li>Dense (Qdrant) and BM25 (OpenSearch) with the same filters → <span class="mono">retrieval_results</span> with original ranks and scores.</li>
+        <li>Authenticate the session; load the user's roles and access groups from PostgreSQL. Read the published <span class="mono">index_generation</span> → both physical names; create <span class="mono">retrieval_runs</span> with request ID, trace ID and <span class="mono">user_id</span>.</li>
+        <li>Dense (Qdrant) and BM25 (OpenSearch) with the same filters — published generation <b>and the user's access groups</b> → <span class="mono">retrieval_results</span> with original ranks and scores.</li>
         <li>RRF + dedupe by chunk ID → <span class="mono">fusion_rank</span>; cross-encoder → <span class="mono">reranker_score</span>.</li>
         <li>Context comes from canonical chunk text in PostgreSQL; the answer and <span class="mono">citation_data</span> → <span class="mono">answer_records</span>.</li>
         <li>Langfuse spans carry IDs, timings and token counts; prompts and document text only where policy allows.</li>
@@ -344,7 +357,8 @@ LIMIT 200;</pre></li>
         <li>Superseded or deleted chunks leave both indexes through <span class="mono">index.delete</span> outbox events.</li>
         <li>Delete → <span class="mono">deleted_at</span> + <i>DELETED</i>; invalidated in both indexes before any MinIO cleanup.</li>
         <li>MinIO objects are removed only after lifecycle checks; <span class="mono">storage_objects</span> prevents deleting shared bytes.</li>
-        <li><span class="mono">audit_events</span> records uploads, publications, deletions and configuration changes.</li>
+        <li>Access change → <span class="mono">document_access_grants</span> updated and an <span class="mono">index.acl</span> outbox event rewrites <span class="mono">access_groups</span> in both indexes.</li>
+        <li><span class="mono">audit_events</span> records sign-ins, uploads, publications, deletions, role and access changes, and configuration changes.</li>
       </ol>
     </section>
   </div>
@@ -352,6 +366,7 @@ LIMIT 200;</pre></li>
   <div class="callout">
     <div class="co"><b>PostgreSQL decides which generation is live</b>Qdrant and OpenSearch cannot switch together, so a generation becomes live by one PostgreSQL commit. The query orchestrator then addresses both physical names from that row; aliases are only for operators and tools.</div>
     <div class="co"><b>Why an outbox in front of Celery</b>Publishing from <span class="mono">transaction.on_commit</span> still loses the task if the process dies after COMMIT but before Redis receives it. The outbox row survives that crash and is re-dispatched; idempotent tasks make a double dispatch harmless.</div>
+    <div class="co"><b>Permissions live in the query, not the prompt</b>The user's access groups come from the server-side session and are added as a mandatory filter to <i>both</i> searches, so text a user may not read never reaches the LLM. Answer caches include the user's access scope in their key.</div>
     <div class="co"><b>Indexes are rebuildable</b>Vectors live only in Qdrant, so a rebuild re-embeds from canonical chunk text in PostgreSQL. To skip re-embedding, export each generation's vectors to <span class="mono">rag-artifacts/</span> in MinIO.</div>
   </div>
 </div>
