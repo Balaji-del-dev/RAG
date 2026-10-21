@@ -125,9 +125,9 @@ Authentication answers *who are you?*; authorization answers *what may you do?*.
   - A failure returns the same message whether the username exists or not.
 - **Lockout:** `django-axes` locks the username for 15 minutes after 5 failures.
   - An axes signal copies the state to `users.failed_login_count` and `users.locked_until`, so the admin screen can show and clear it.
-- **MFA:** TOTP through `django-otp`. It is required for the Admin role and optional for everyone else.
-  - Sign-in answers `mfa_required: true`; the session counts as verified only after `POST /auth/mfa/verify/`.
-  - Admin endpoints also require `request.user.is_verified()`.
+- **MFA:** TOTP through `django-otp`. It is **optional** by default: username and password are enough, for every role.
+  - Anyone who sets up an authenticator app is asked for its code at every sign-in.
+  - `MFA_REQUIRED_FOR_ADMINS=true` (in `backend/.env`) makes the Admin role use an app too: console admin pages and Django admin then ask for the code.
 - **Sessions:** Django's database session store, plus one `user_sessions` row per sign-in (SHA-256 of the session key, IP address, user agent).
   - `SessionGuardMiddleware` rejects revoked or expired sessions.
   - **Idle timeout:** 30 minutes. **Absolute timeout:** 8 hours.
@@ -386,11 +386,13 @@ All of them bind to `127.0.0.1`.
 
 | Process | Command (from `backend/`) | Port | Memory (approx.) |
 |---|---|---|---|
-| API | `uvicorn config.asgi:application --host 127.0.0.1 --port 8000` | 8000 | ~0.9 GB (with the embedder and reranker) |
+| API | `uvicorn config.asgi:application --host 127.0.0.1 --port 8001` | 8001 (8000 is used by another project here) | ~0.9 GB (with the embedder and reranker) |
 | Outbox dispatcher | `python manage.py run_outbox` | — | ~0.1 GB |
 | Celery worker | `celery -A config worker -Q ingest,index,evaluation --concurrency=1 --max-tasks-per-child=20` | — | 1.5–2 GB while processing |
-| Celery beat | `celery -A config beat` | — | small |
+| Celery beat | `celery -A config beat` (nightly reconcile, daily session and outbox clean-up) | — | small |
 | Flower | `celery -A config flower --address=127.0.0.1 --port=5555` | 5555 | small |
+
+**Start and stop them with `backend/dev.sh start | stop | restart | status | logs <name>`.** Each runs as its own systemd user service (`rag-api`, `rag-worker`, …), outside the editor, and restarts by itself after a crash. The console dev server (`rag-console`, Vite on `localhost:5173`) is managed the same way.
 
 The backing services (PostgreSQL, Redis, MinIO, Qdrant, OpenSearch, Ollama) are covered in [execution/phase-00-machine-setup.md](execution/phase-00-machine-setup.md).
 

@@ -192,6 +192,8 @@ Migrations are added phase by phase. Django resolves the dependencies, but the *
 | 11 | `retrieval 0001` | 7 | the 5 tables of 4.5 | references indexing, processing, users |
 | 12 | `evaluation 0002` + `0003` (data) | 8 | datasets, cases, runs, results + the `svc-evaluation` account | references retrieval, indexing, registry |
 
+**Status (2026-10-20):** migrations 1–4 and 7–11 are applied, plus `evaluation 0002`. All 42 tables exist; `accounts 0005` also made four description and user-agent columns nullable to match the diagram. The seed data of `registry 0002` and `evaluation 0003` still comes in Phases 3 and 8. A test (`backend/tests/test_schema_matches_diagram.py`) checks every table, column and nullability against `docs/src/build_schema.py`.
+
 ## 7. Important rules the database enforces
 
 - **One live generation:** a partial unique index allows only one `index_generations` row with `status = 'PUBLISHED'`. Publishing is one transaction: the old row becomes `RETIRED` and the new one `PUBLISHED`.

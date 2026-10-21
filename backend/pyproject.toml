@@ -1,0 +1,40 @@
+[project]
+name = "rag-platform-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py", "tests.py"]
+addopts = "-q -m 'not integration' --ds=config.settings.test"
+markers = [
+  "integration: needs the real local services (run with -m integration)",
+  "slow: runs the real local models (Docling, Tesseract, embeddings)",
+]
+filterwarnings = ["ignore::DeprecationWarning:pkg_resources.*"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ", "N", "S"]
+ignore = ["S101", "S105", "S106", "B904", "DJ001"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S", "N802", "E501"]
+"tests/**" = ["S"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "config"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+ignore_missing_imports = true
+check_untyped_defs = true
+exclude = ["/migrations/"]
+
+[tool.django-stubs]
+django_settings_module = "config.settings.test"

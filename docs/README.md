@@ -141,7 +141,7 @@ Two further recommendations:
 **Authentication — who are you?**
 - Django authentication with a custom user model (`users`). Local accounts store Argon2 password hashes; LDAP / Active Directory sign-in is optional (`auth_source`).
 - Server-side sessions (`user_sessions`): HttpOnly + Secure + SameSite cookie, a CSRF token on every write, idle and absolute timeouts, and revocation on logout or by an admin.
-- Lockout after repeated failed sign-ins (`failed_login_count`, `locked_until`); MFA (TOTP) for admins.
+- Lockout after repeated failed sign-ins (`failed_login_count`, `locked_until`); optional MFA (TOTP), which can be required for admins with `MFA_REQUIRED_FOR_ADMINS=true`.
 
 **Authorization — what may you do?**
 
@@ -193,6 +193,7 @@ Query rewriting, multi-query, HyDE, decomposition, corrective retrieval and agen
 docs/
 ├── README.md
 ├── plan/                      # build plan: backend, frontend, database, API, execution phases 0–9
+├── runbook.md                 # start/stop, URLs, roles, everyday tasks, backup and restore
 ├── concepts/                  # 27 interview lessons + question bank + revision page
 ├── images/                    # rendered PNGs (2× scale)
 │   ├── 01-system-architecture.png

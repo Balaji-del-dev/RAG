@@ -11,6 +11,8 @@ Architecture documentation for a fully local, configurable RAG platform built fr
 
 The full write-up is in **[docs/README.md](docs/README.md)**.
 
+**Run it:** `backend/dev.sh start`, then open http://localhost:5173. Day-to-day operation is in **[docs/runbook.md](docs/runbook.md)**; the build plan and its progress are in [docs/plan/](docs/plan/README.md).
+
 **Learning path:** [docs/concepts/index.html](docs/concepts/index.html) — 27 ordered, interview-focused lessons, from how LLMs work to designing a full RAG system, with 277 interview questions and model answers ([Q&A bank](docs/concepts/interview-questions.html) · [revision page](docs/concepts/revision.html)).
 
 | Diagram | |

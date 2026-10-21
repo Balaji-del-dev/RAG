@@ -1,3 +1,16 @@
 __pycache__/
 node_modules/
 *.pyc
+
+# local settings and secrets
+.env
+.venv/
+
+# build output and runtime files
+console/dist/
+backend/staticfiles/
+*.log
+celerybeat-schedule*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

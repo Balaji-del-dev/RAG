@@ -124,6 +124,7 @@ All of these also require an MFA-verified session.
 | POST | `index-generations/` | `indexes.build` | `{pipeline_version_id}` → new generation and a full build job |
 | GET | `index-generations/{id}/` | `indexes.view` | Detail with build jobs and validation results |
 | POST | `index-generations/{id}/validate/` | `indexes.build` | Run the validations again |
+| POST | `index-generations/{id}/publish/` | `releases.approve` | Make the **first** validated generation live (later generations are released through `eval/runs/{id}/approve/`) |
 | POST | `index-generations/{id}/rollback/` | `releases.approve` | Make this **retired** generation live again; it must still have its physical indexes |
 
 Publishing a new generation happens through release approval ([2.8](#28-evaluation-and-release-evaluation)), together with its pipeline version.
@@ -145,7 +146,7 @@ Publishing a new generation happens through release approval ([2.8](#28-evaluati
 | Event | `data` | When |
 |---|---|---|
 | `meta` | `{run_id, request_id}` | first |
-| `status` | `{stage: "searching" \| "reranking" \| "writing" \| "checking"}` | as each stage starts |
+| `status` | `{stage: "queued" \| "searching" \| "reranking" \| "writing" \| "checking"}` | as each stage starts (`queued` while another answer is being written) |
 | `token` | `{text}` | while the model writes the **draft** |
 | `done` | `{answer_id, answer, citations: [{n, chunk_id, document_id, filename, page_start, page_end}], status: "VALIDATED" \| "REPAIRED"}` | after validation passes: the final answer |
 | `abstain` | `{message, clarifying_question?}` | no good evidence, or validation failed after one repair |
@@ -163,6 +164,9 @@ The stream always ends with exactly one `done`, `abstain` or `error` event. A dr
 | POST | `eval/datasets/{id}/cases/from-failures/` | `evaluation.manage_datasets` | Copy reviewed failure cases into a new dataset version |
 | GET · POST | `eval/runs/` | view: `evaluation.view` · start: `evaluation.run` | Runs · start `{dataset_id, pipeline_version_id, index_generation_id}` |
 | GET | `eval/runs/{id}/` | `evaluation.view` | Metric summary vs baseline, gate result, per-case results |
+| GET | `eval/candidates/` | `evaluation.run` | What a run can measure: every live, building or validating generation with its pipeline version |
+| POST | `eval/datasets/{id}/new-version/` | `evaluation.manage_datasets` | Copy a (frozen) dataset version into a new, editable version |
+| PATCH · DELETE | `eval/cases/{id}/` | `evaluation.manage_datasets` | Edit or delete one case (not in a frozen version) |
 | POST | `eval/runs/{id}/approve/` | `releases.approve` | Approve and publish (one transaction). Needs: run `PASSED`, approver ≠ the version's `created_by`, generation validated. Otherwise `409` explains which rule failed |
 
 ### 2.9 System (`core`)

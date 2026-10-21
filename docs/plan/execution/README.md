@@ -6,16 +6,22 @@ This folder sets the build order. Each phase gives a working, testable step. A l
 
 | # | Phase | Backend apps | Console pages | Needs | Rough size* | Status |
 |---|---|---|---|---|---|---|
-| 0 | [Machine setup](phase-00-machine-setup.md) | — | — | — | 1–2 days | Not started |
-| 1 | [Backend foundation](phase-01-backend-foundation.md) | `core`, `accounts` (user model only) | — | 0 | 3 days | Not started |
-| 2 | [Identity & access + console shell](phase-02-identity-access.md) | `accounts` | Login, MFA, layout, account, admin pages | 1 | 5 days | Not started |
-| 3 | [Pipeline registry](phase-03-pipeline-registry.md) | `registry` | Pipelines, version editor | 2 | 3 days | Not started |
-| 4 | [Documents & upload](phase-04-documents-upload.md) | `documents` | Documents, upload, document detail | 2, 3 | 4 days | Not started |
-| 5 | [Processing pipeline](phase-05-processing.md) | `processing` | Job timeline, retry | 4 | 6 days | Not started |
-| 6 | [Indexing](phase-06-indexing.md) | `indexing` | Indexes | 5 | 5 days | Not started |
-| 7 | [Retrieval & chat](phase-07-retrieval-chat.md) | `retrieval` | Chat, citations, feedback, history | 6 | 7 days | Not started |
-| 8 | [Evaluation & release](phase-08-evaluation-release.md) | `evaluation` | Evaluation, datasets, runs, failures, approval, audit log | 7 | 5 days | Not started |
-| 9 | [Hardening & daily use](phase-09-hardening.md) | all | all | 8 | 4 days | Not started |
+| 0 | [Machine setup](phase-00-machine-setup.md) | — | — | — | 1–2 days | Done (2026-10-21) |
+| 1 | [Backend foundation](phase-01-backend-foundation.md) | `core`, `accounts` (user model only) | — | 0 | 3 days | Done (2026-10-21) |
+| 2 | [Identity & access + console shell](phase-02-identity-access.md) | `accounts` | Login, MFA, layout, account, admin pages | 1 | 5 days | Done (2026-10-21) |
+| 3 | [Pipeline registry](phase-03-pipeline-registry.md) | `registry` | Pipelines, version editor | 2 | 3 days | Done (2026-10-21) |
+| 4 | [Documents & upload](phase-04-documents-upload.md) | `documents` | Documents, upload, document detail | 2, 3 | 4 days | Done (2026-10-21) |
+| 5 | [Processing pipeline](phase-05-processing.md) | `processing` | Job timeline, retry | 4 | 6 days | Done (2026-10-21) |
+| 6 | [Indexing](phase-06-indexing.md) | `indexing` | Indexes | 5 | 5 days | Done (2026-10-21) |
+| 7 | [Retrieval & chat](phase-07-retrieval-chat.md) | `retrieval` | Chat, citations, feedback, history | 6 | 7 days | Done (2026-10-21) |
+| 8 | [Evaluation & release](phase-08-evaluation-release.md) | `evaluation` | Evaluation, datasets, runs, failures, approval, audit log | 7 | 5 days | Done (2026-10-21) |
+| 9 | [Hardening & daily use](phase-09-hardening.md) | all | all | 8 | 4 days | In progress |
+
+**Progress (2026-10-21):** phases 0–8 are built and tested (backend unit + integration tests against the real local services, console tests, and a browser run of every role's pages). Phase 9 is in progress:
+- **Done:** every process runs as its own systemd user service (`backend/dev.sh`), security headers, database guards (append-only audit log, frozen published pipeline versions), nightly Celery beat jobs, and the `manage.py backup` command.
+- **Still open:** serving the built console from Django (whitenoise), a Content-Security-Policy, the restore drill, a dependency audit, and recorded performance numbers.
+
+**Built ahead of plan (2026-10-20):** the models and migrations for all 42 tables exist already, so Django admin can show every table. Phases 3–8 still add their seed data, services, tasks, API endpoints and console pages; tick the "Models" task in each phase file once its tests cover them.
 
 \* For one developer, a rough estimate: about 43–44 working days, or roughly 9 weeks. Update the **Status** column as you go: `Not started` → `In progress` → `Done`.
 

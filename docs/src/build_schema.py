@@ -348,7 +348,7 @@ TABLES = {
         ("id", "bigint", "PK"),
         ("event_type", "varchar(80)", ""),
         ("entity_type", "varchar(60)", ""),
-        ("entity_id", "uuid", ""),
+        ("entity_id", "uuid", "N"),
         ("actor", "varchar(150)", ""),
         ("actor_user_id", "uuid → users", "N ADD"),
         ("ip_address", "inet", "N ADD"),

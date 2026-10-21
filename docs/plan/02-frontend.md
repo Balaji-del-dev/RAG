@@ -93,6 +93,7 @@ Tests sit next to the code as `*.test.tsx`.
 | `/evaluation/runs/:id` | Metric table, failed cases, gate result, **Approve** | `evaluation.view` (approve: `releases.approve`) | `GET /eval/runs/{id}/`, `POST …/approve/` | Evaluation Dashboard |
 | `/evaluation/failures` | Failure cases: open → in review → resolved | `failures.review` | `GET/PATCH /failure-cases/` | Evaluation Dashboard |
 | `/admin/users` | Users: create, deactivate, unlock, roles, access groups | `accounts.manage` | `/admin/users/…` | Sign-in & Session |
+| `/admin/roles` | Read-only list of the six roles and their permissions | `accounts.manage` | `GET /admin/roles/` | Sign-in & Session |
 | `/admin/access-groups` | Access groups and their members | `accounts.manage` | `/admin/access-groups/…` | Sign-in & Session |
 | `/admin/sessions` | Active sessions; revoke | `accounts.manage` | `/admin/sessions/…` | Sign-in & Session |
 | `/admin/audit` | Audit log with filters | `audit.read` | `GET /audit-events/` | — |
@@ -108,7 +109,7 @@ Tests sit next to the code as `*.test.tsx`.
 | Pipeline engineer | Pipelines · Indexes |
 | Evaluator | Evaluation · Datasets · Failures |
 | Release approver | Evaluation · Pipelines · Indexes (approve and roll back) |
-| Admin | Users · Access groups · Sessions · Audit log |
+| Admin | Users · Roles · Access groups · Sessions · Audit log |
 
 ## 4. Signing in and staying safe
 
