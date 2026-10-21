@@ -171,3 +171,33 @@ def test_feedback_and_failure_cases(live, make_user, scripted, signed_in):
     assert api.get(f"/api/v1/chunks/{chunk_id}/").json()["filename"] == "policy.md"
     assert signed_in(groups=["finance"])[0].get(f"/api/v1/chunks/{chunk_id}/").status_code == 404
     assert RetrievalRun.objects.filter(user=user).count() == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True, serialized_rollback=True)
+async def test_a_second_question_waits_its_turn_instead_of_being_turned_away(live, make_user, monkeypatch):
+    import asyncio
+    import time
+
+    from asgiref.sync import sync_to_async
+
+    def slow_stream(model, prompt, **kwargs):
+        time.sleep(1.5)  # the model is busy with the first answer
+        yield "Every employee gets 24 days of annual leave per year [1]."
+
+    monkeypatch.setattr(llm, "stream", slow_stream)
+    user = await sync_to_async(make_user)()
+    client = AsyncClient()
+    await client.aforce_login(user)
+
+    async def ask_once():
+        response = await client.post(
+            "/api/v1/ask/", json.dumps({"question": "How many days of annual leave?"}), content_type="application/json"
+        )
+        return b"".join([chunk async for chunk in response.streaming_content]).decode()
+
+    first = asyncio.ensure_future(ask_once())
+    await asyncio.sleep(0.3)
+    second = await ask_once()
+    assert '"stage": "waiting"' in second and "event: done" in second and "llm_busy" not in second
+    assert "event: done" in await first

@@ -45,8 +45,9 @@ Every lesson has the same structure: **What is it?** (the formal interview answe
 | 4 · Quality | 20 Evaluating RAG · 21 Observability & tracing |
 | 5 · Safety & production | 22 Guardrails · 23 LLM security & prompt injection · 24 Privacy & data governance · 25 Production: latency, cost, scale · 26 Fine-tuning, LoRA & RLHF · 27 System design: the full RAG system |
 
-Two practice pages sit next to the lessons:
+Three pages sit next to the lessons:
 
+- **[concepts/rag-flow.html](concepts/rag-flow.html)** — the whole RAG pipeline on one page, in order: ingestion, parsing, OCR, chunking, embedding, indexing, query rewriting, hybrid search and RRF, reranking, context, grounded generation, guardrails and evaluation. Each step covers how it works, why real projects use it, its formulas (BM25, RRF, precision@k, recall@k, MRR, nDCG, faithfulness) with worked examples, and what this platform uses.
 - **[concepts/interview-questions.html](concepts/interview-questions.html)** — all 277 questions with model answers and key words; filter by stage and level, search, mark questions as known, and practise with flashcards.
 - **[concepts/revision.html](concepts/revision.html)** — every lesson's interview definition and five key points on one page, for the day before an interview.
 

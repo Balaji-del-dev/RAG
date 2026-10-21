@@ -22,7 +22,7 @@ from . import orchestrator
 log = structlog.get_logger(__name__)
 
 GENERATION_SLOT = asyncio.Semaphore(1)
-WAIT_FOR_SLOT_SECONDS = 30
+WAIT_FOR_SLOT_SECONDS = 180  # an answer takes 20-60 seconds on this CPU: wait for a couple of them, then give up
 RATE_LIMIT_PER_MINUTE = 10
 
 
@@ -91,24 +91,29 @@ async def ask(request: HttpRequest):
         finally:
             close_old_connections()
             loop.call_soon_threadsafe(queue.put_nowait, None)
+            # Free the slot only when the model is free: also when the browser left in the middle of the answer.
+            loop.call_soon_threadsafe(GENERATION_SLOT.release)
 
     async def events():
+        if GENERATION_SLOT.locked():
+            yield _event("status", {"stage": "waiting"})
         try:
             await asyncio.wait_for(GENERATION_SLOT.acquire(), timeout=WAIT_FOR_SLOT_SECONDS)
         except TimeoutError:
-            yield _event("error", {"code": "llm_busy", "message": "Another answer is being written. Try again in a moment."})
+            busy = "Other answers are still being written. Try again in a minute."
+            yield _event("error", {"code": "llm_busy", "message": busy})
             return
         try:
-            yield _event("status", {"stage": "queued"})
-            task = asyncio.create_task(asyncio.to_thread(work))
-            while True:
-                item = await queue.get()
-                if item is None:
-                    break
-                yield _event(*item)
-            await task
-        finally:
+            loop.run_in_executor(None, work)  # the thread releases the slot when it ends
+        except BaseException:
             GENERATION_SLOT.release()
+            raise
+        yield _event("status", {"stage": "queued"})
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield _event(*item)
 
     response = StreamingHttpResponse(events(), content_type="text/event-stream; charset=utf-8")
     response["Cache-Control"] = "no-cache"

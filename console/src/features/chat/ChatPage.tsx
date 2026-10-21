@@ -13,6 +13,7 @@ import { AnswerText } from './AnswerText'
 
 const MAX_QUESTION = 2000
 const STAGE_TEXT: Record<string, string> = {
+  waiting: 'Waiting for another answer to finish…',
   queued: 'Waiting for the model…',
   searching: 'Searching your documents…',
   reranking: 'Picking the best passages…',

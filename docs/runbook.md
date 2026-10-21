@@ -81,20 +81,19 @@ cd .. && backend/dev.sh start
 Users, roles, access groups, pipelines and the audit log stay. After the first upload, the new index generation
 must be made live: Indexes → Validate → Publish.
 
-## Releasing pipeline v2 (better answers)
+## Pipeline v2 (live since 2026-10-21)
 
-v2 is a draft. Compared with v1 it adds:
+Compared with v1, v2 adds:
 - the document title and section to every chunk, for search and for the reranker;
 - keyword search over file names and headings that forgives typos;
 - up to 5 sources instead of 1–4, and a prompt that asks for complete, structured answers.
 
-Expect about 20–40 seconds per answer on this CPU.
+On the `cv-basics` dataset, answers held 93% of the expected facts, against 3% with v1. Retrieval stayed at hit@5 = 1.0, and the abstention case still passed. Expect about 20–40 seconds per answer on this CPU; questions asked at the same time wait their turn (up to 3 minutes).
 
-1. Upload the documents (they are processed by the live v1).
-2. As a Pipeline engineer: Indexes → **Build** for v2, wait until its chunks are counted, then **Validate**.
-3. As an Evaluator: Evaluation → Datasets → create questions about the documents, then start a run for v2.
-4. As a **different** Release approver (`demo-release-approver`): open the passed run → **Approve and publish**.
-   v1 is retired; roll back on the Indexes page if needed.
+**Releasing a later version** works the same way:
+1. Pipeline engineer: Pipelines → clone → edit the draft → Indexes → **Build** for it → **Validate**.
+2. Evaluator: start a run on a dataset, against the new version's generation.
+3. A **different** Release approver: open the passed run → **Approve and publish**. Roll back on the Indexes page if needed.
 
 ## One-time setup commands
 
