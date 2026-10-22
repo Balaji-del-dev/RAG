@@ -1,0 +1,63 @@
+/* RAG Handbook — additions on top of ../concepts/assets/concepts.css (colours, layout, top bar, sidebar). */
+.content { max-width: 940px; }
+.sidebar .subnav { margin: 2px 0 8px 32px; border-left: 2px solid var(--line); padding-left: 10px; }
+.sidebar .subnav a { display: block; font-size: 13px; color: var(--muted); text-decoration: none; padding: 3px 0; line-height: 1.35; }
+.sidebar .subnav a:hover { color: var(--accent); }
+
+.finder { display: flex; align-items: center; gap: 12px; margin: 6px 0 10px; position: sticky; top: 60px; z-index: 5; }
+.finder input { flex: 1; min-width: 0; font: inherit; font-size: 15px; padding: 9px 14px; border-radius: 10px; border: 1.5px solid var(--line-2); background: var(--surface); color: var(--ink); }
+.finder input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); border-color: var(--accent); }
+.finder .hits { font-size: 13.5px; color: var(--muted); white-space: nowrap; }
+.finder.big { position: static; }
+.finder.big input { font-size: 17px; padding: 12px 16px; }
+
+section.group { scroll-margin-top: 70px; }
+section.group > h2 { margin-top: 40px; }
+.gintro { color: var(--ink-2); }
+
+.concept { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px 14px; margin: 14px 0; scroll-margin-top: 120px; }
+.concept:target { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.concept h3 { margin: 0 0 10px; display: flex; gap: 10px; align-items: baseline; font-size: 19px; line-height: 1.3; }
+.concept .cid { font-family: "Noto Sans Mono", "DejaVu Sans Mono", ui-monospace, monospace; font-size: 12.5px; font-weight: 600; color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+.concept .self { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 15px; opacity: .5; }
+.concept .self:hover { opacity: 1; color: var(--accent); }
+.concept .lead { margin: 0 0 12px; padding: 9px 13px; border-radius: 10px; background: var(--tint-ok); border: 1px solid color-mix(in srgb, var(--ok) 25%, transparent); font-size: 16.5px; }
+.concept .lead .lbl { display: block; font-weight: 800; font-size: 11.5px; letter-spacing: .9px; text-transform: uppercase; color: var(--ok); margin-bottom: 1px; }
+.concept dl { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 8px 16px; margin: 0; font-size: 15.3px; }
+.concept dt { font-weight: 800; font-size: 12px; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
+.concept dt.k-p { color: var(--s4); } .concept dt.k-e { color: var(--s3); } .concept dt.k-n { color: var(--bad); }
+.concept dd { margin: 0; color: var(--ink-2); }
+.concept dd ul, .concept dd ol { margin: 4px 0 0; padding-left: 20px; }
+.concept .code { margin-top: 12px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+.concept .code-h { display: flex; align-items: center; justify-content: space-between; padding: 5px 10px 5px 14px; background: var(--surface-2); font-size: 12px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
+.concept .code-h button { font: inherit; font-size: 12px; text-transform: none; letter-spacing: 0; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2); border-radius: 7px; padding: 2px 10px; cursor: pointer; }
+.concept .code pre { margin: 0; border-radius: 0; font-size: 13.2px; }
+
+ol.order { padding-left: 0; list-style: none; counter-reset: o; columns: 2; column-gap: 24px; }
+ol.order li { counter-increment: o; break-inside: avoid; padding: 6px 0 6px 38px; position: relative; font-size: 15px; }
+ol.order li::before { content: counter(o); position: absolute; left: 0; top: 7px; width: 26px; height: 26px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--line-2); font-size: 12.5px; font-weight: 800; display: flex; align-items: center; justify-content: center; color: var(--ink-2); }
+ol.order li span { display: block; color: var(--muted); font-size: 13.5px; }
+ol.order a { text-decoration: none; }
+
+.tree details.tsec { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin: 8px 0; padding: 8px 14px; }
+.tree summary { cursor: pointer; font-weight: 700; }
+.tree summary .n { font-family: "Noto Sans Mono", ui-monospace, monospace; font-size: 12.5px; color: var(--muted); margin-right: 4px; }
+.tree summary small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.tree .tgroup { margin: 10px 0 4px; }
+.tree .tgroup > b { font-size: 14px; color: var(--ink-2); }
+.tree .tgroup ul { columns: 2; column-gap: 24px; margin: 4px 0 0; font-size: 14.5px; }
+.tree .tgroup li { break-inside: avoid; margin-bottom: 3px; }
+
+.results { margin: 6px 0 20px; }
+.results .hit { display: block; text-decoration: none; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 13px; margin: 6px 0; }
+.results .hit:hover { border-color: var(--accent); }
+.results .hit .cid { font-family: "Noto Sans Mono", ui-monospace, monospace; font-size: 12px; color: var(--muted); margin-right: 8px; }
+.results .hit span:last-child { display: block; color: var(--ink-2); font-size: 14px; }
+.muted { color: var(--muted); }
+
+@media (max-width: 720px) {
+  .concept dl { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .concept dt { padding-top: 10px; }
+  ol.order, .tree .tgroup ul { columns: 1; }
+  .finder { top: 52px; }
+}

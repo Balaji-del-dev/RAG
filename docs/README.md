@@ -53,6 +53,15 @@ Three pages sit next to the lessons:
 
 The interview content lives in `concepts/assets/qa/NN.js` (one file per lesson); `concepts/assets/path.js` holds the lesson order and renders navigation, questions and revision cards.
 
+## RAG Handbook — every concept, explained
+
+**[handbook/index.html](handbook/index.html)** explains 710 concepts in 24 sections. It covers RAG foundations, ingestion, parsing, chunking, embedding, indexing, query understanding, rewriting and assembly, retrieval, hybrid fusion, reranking, context assembly, context windows, memory, generation, advanced RAG, guardrails and security, evaluation, production and ops, tools, LLM internals, fine-tuning, and system architecture.
+
+Each concept has the same parts: **in simple words**, **how it works**, **where to use it**, **the real-world problem it solves**, **a real-time example**, and, for 136 of them, **simple code**.
+- The start page has the whole tree, a suggested learning order, and search across all concepts.
+- Each section page has a filter.
+- The content lives in `handbook/data/NN.js`, one file per section; `handbook/assets/handbook.js` renders the pages.
+
 ---
 
 ## Build plan
